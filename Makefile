@@ -3,11 +3,17 @@ PQCLEAN_DIR ?= libs/pqclean
 
 CFLAGS += -Iinclude -I$(MBEDTLS_DIR)/include \
         -I$(PQCLEAN_DIR)/crypto_sign/ml-dsa-87/clean \
+        -I$(PQCLEAN_DIR)/common \
         -DMBEDTLS_CONFIG_FILE='"mbedtls_custom_config.h"'
 LDFLAGS += -L$(MBEDTLS_DIR)/library -lmbedtls -lmbedcrypto -lmbedx509 \
            -L$(PQCLEAN_DIR)/crypto_sign/ml-dsa-87/clean -lml-dsa-87_clean
 
-SRC = src/crypto.c
+SRC = src/crypto.c \
+       $(PQCLEAN_DIR)/common/randombytes.c \
+       $(PQCLEAN_DIR)/common/fips202.c \
+       $(PQCLEAN_DIR)/common/sha2.c \
+       $(PQCLEAN_DIR)/common/nistseedexpander.c \
+       $(PQCLEAN_DIR)/common/sp800-185.c
 OBJ = $(SRC:.c=.o)
 TOOL_SRC = src/main.c src/cliopts.c
 TOOL_OBJ = $(TOOL_SRC:.c=.o)

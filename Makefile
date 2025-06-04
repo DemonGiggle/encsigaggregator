@@ -38,6 +38,6 @@ clean:
 	rm -f $(OBJ) $(TOOL_OBJ) libcrypto.a encsigtool
 
 encsigtool: libcrypto.a $(TOOL_OBJ)
-	$(CC) $(CFLAGS) -o $@ $(TOOL_OBJ) libcrypto.a $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $(TOOL_OBJ) -Wl,--start-group libcrypto.a $(LDFLAGS) -Wl,--end-group
 
 .PHONY: all clean

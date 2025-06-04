@@ -20,6 +20,7 @@ static int rng_callback(void *ctx, unsigned char *out, size_t len) {
     return mbedtls_ctr_drbg_random((mbedtls_ctr_drbg_context *)ctx, out, len);
 }
 
+
 int crypto_keygen(crypto_alg alg, crypto_key *out_priv, crypto_key *out_pub) {
     if (!out_priv || !out_pub)
         return -1;
@@ -172,34 +173,54 @@ int crypto_verify(crypto_alg alg, const crypto_key *pub, const uint8_t *msg, siz
     return -1;
 }
 
-int crypto_encrypt_aes256cbc(const uint8_t key[32], const uint8_t iv[16],
-                             const uint8_t *in, size_t len, uint8_t *out) {
+static int aes_setkey(mbedtls_aes_context *aes, const uint8_t *key, size_t bits, int enc)
+{
+    if (bits != 128 && bits != 192 && bits != 256)
+        return -1;
+    if (enc)
+        return mbedtls_aes_setkey_enc(aes, key, (unsigned int)bits);
+    else
+        return mbedtls_aes_setkey_dec(aes, key, (unsigned int)bits);
+}
+
+int crypto_encrypt_aescbc(const uint8_t *key, size_t bits,
+                          const uint8_t iv[16],
+                          const uint8_t *in, size_t len, uint8_t *out) {
     if (!key || !iv || !in || !out)
         return -1;
     mbedtls_aes_context aes;
     mbedtls_aes_init(&aes);
-    if (mbedtls_aes_setkey_enc(&aes, key, 256) != 0)
+    if (aes_setkey(&aes, key, bits, 1) != 0) {
+        mbedtls_aes_free(&aes);
         return -1;
+    }
     unsigned char iv_copy[16];
     memcpy(iv_copy, iv, 16);
-    if (mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_ENCRYPT, len, iv_copy, in, out) != 0)
+    if (mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_ENCRYPT, len, iv_copy, in, out) != 0) {
+        mbedtls_aes_free(&aes);
         return -1;
+    }
     mbedtls_aes_free(&aes);
     return 0;
 }
 
-int crypto_decrypt_aes256cbc(const uint8_t key[32], const uint8_t iv[16],
-                             const uint8_t *in, size_t len, uint8_t *out) {
+int crypto_decrypt_aescbc(const uint8_t *key, size_t bits,
+                          const uint8_t iv[16],
+                          const uint8_t *in, size_t len, uint8_t *out) {
     if (!key || !iv || !in || !out)
         return -1;
     mbedtls_aes_context aes;
     mbedtls_aes_init(&aes);
-    if (mbedtls_aes_setkey_dec(&aes, key, 256) != 0)
+    if (aes_setkey(&aes, key, bits, 0) != 0) {
+        mbedtls_aes_free(&aes);
         return -1;
+    }
     unsigned char iv_copy[16];
     memcpy(iv_copy, iv, 16);
-    if (mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_DECRYPT, len, iv_copy, in, out) != 0)
+    if (mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_DECRYPT, len, iv_copy, in, out) != 0) {
+        mbedtls_aes_free(&aes);
         return -1;
+    }
     mbedtls_aes_free(&aes);
     return 0;
 }

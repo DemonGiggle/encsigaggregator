@@ -34,4 +34,5 @@ The Makefile assumes the library paths above and uses
 ## Usage
 
 The API defined in `include/crypto.h` allows algorithm independent key
-generation, signing, verification and AES‑CBC‑256 encryption/decryption.
+generation, signing, verification and AES‑CBC encryption/decryption with
+128/192/256‑bit keys.

@@ -1,10 +1,12 @@
 #include "crypto.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 #include <mbedtls/aes.h>
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/entropy.h>
+#include <mbedtls/pk.h>
 #include <mbedtls/rsa.h>
 #include <mbedtls/md.h>
 #include <mbedtls/lms.h>
@@ -16,9 +18,64 @@ typedef struct {
     mbedtls_lms_public_t pub;
 } lms_pair;
 
+static int read_file(const char *path, unsigned char **buf, size_t *len)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f)
+        return -1;
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    unsigned char *tmp = malloc(sz ? sz : 1);
+    if (!tmp) { fclose(f); return -1; }
+    if (fread(tmp, 1, sz, f) != (size_t)sz) { fclose(f); free(tmp); return -1; }
+    fclose(f);
+    *buf = tmp;
+    *len = sz;
+    return 0;
+}
+
 static int rng_callback(void *ctx, unsigned char *out, size_t len) {
     return mbedtls_ctr_drbg_random((mbedtls_ctr_drbg_context *)ctx, out, len);
 }
+
+int crypto_init_aes(size_t bits, const char *key_path, const char *iv_path,
+                    uint8_t *key_out, uint8_t iv_out[16])
+{
+    if (!key_out || !iv_out || (bits != 128 && bits != 192 && bits != 256))
+        return -1;
+
+    mbedtls_entropy_context ent;
+    mbedtls_ctr_drbg_context drbg;
+    mbedtls_entropy_init(&ent);
+    mbedtls_ctr_drbg_init(&drbg);
+    if (mbedtls_ctr_drbg_seed(&drbg, mbedtls_entropy_func, &ent, NULL, 0) != 0)
+        return -1;
+
+    uint8_t *tmp = NULL;
+    size_t len = 0;
+    if (key_path && read_file(key_path, &tmp, &len) == 0 && len == bits / 8) {
+        memcpy(key_out, tmp, len);
+        free(tmp);
+    } else {
+        if (tmp) free(tmp);
+        mbedtls_ctr_drbg_random(&drbg, key_out, bits / 8);
+    }
+
+    tmp = NULL; len = 0;
+    if (iv_path && read_file(iv_path, &tmp, &len) == 0 && len == 16) {
+        memcpy(iv_out, tmp, 16);
+        free(tmp);
+    } else {
+        if (tmp) free(tmp);
+        mbedtls_ctr_drbg_random(&drbg, iv_out, 16);
+    }
+
+    mbedtls_ctr_drbg_free(&drbg);
+    mbedtls_entropy_free(&ent);
+    return 0;
+}
+
 
 int crypto_keygen(crypto_alg alg, crypto_key *out_priv, crypto_key *out_pub) {
     if (!out_priv || !out_pub)
@@ -31,18 +88,22 @@ int crypto_keygen(crypto_alg alg, crypto_key *out_priv, crypto_key *out_pub) {
         return -1;
 
     if (alg == CRYPTO_ALG_RSA4096) {
-        mbedtls_rsa_context *rsa = calloc(1, sizeof(*rsa));
-        if (!rsa) return -1;
-        mbedtls_rsa_init(rsa);
-        if (mbedtls_rsa_gen_key(rsa, rng_callback, &drbg, 4096, 65537) != 0) {
-            mbedtls_rsa_free(rsa);
-            free(rsa);
+        mbedtls_pk_context *pk = calloc(1, sizeof(*pk));
+        if (!pk) return -1;
+        mbedtls_pk_init(pk);
+        if (mbedtls_pk_setup(pk, mbedtls_pk_info_from_type(MBEDTLS_PK_RSA)) != 0) {
+            free(pk);
+            return -1;
+        }
+        if (mbedtls_rsa_gen_key(mbedtls_pk_rsa(*pk), rng_callback, &drbg, 4096, 65537) != 0) {
+            mbedtls_pk_free(pk);
+            free(pk);
             return -1;
         }
         out_priv->alg = out_pub->alg = CRYPTO_ALG_RSA4096;
-        out_priv->key = rsa;
-        out_pub->key = rsa; /* RSA uses same context for priv/pub */
-        out_priv->key_len = out_pub->key_len = sizeof(*rsa);
+        out_priv->key = pk;
+        out_pub->key = pk; /* share context */
+        out_priv->key_len = out_pub->key_len = sizeof(*pk);
         return 0;
     } else if (alg == CRYPTO_ALG_LMS) {
         lms_pair *pair = calloc(1, sizeof(*pair));
@@ -87,6 +148,56 @@ int crypto_keygen(crypto_alg alg, crypto_key *out_priv, crypto_key *out_pub) {
     return -1;
 }
 
+int crypto_load_keypair(crypto_alg alg, const char *priv_path, const char *pub_path,
+                        crypto_key *out_priv, crypto_key *out_pub)
+{
+    if (!out_priv || !out_pub)
+        return -1;
+    if (!priv_path || !pub_path)
+        return crypto_keygen(alg, out_priv, out_pub);
+
+    unsigned char *priv_buf = NULL, *pub_buf = NULL;
+    size_t priv_len = 0, pub_len = 0;
+    if (read_file(priv_path, &priv_buf, &priv_len) != 0 ||
+        read_file(pub_path, &pub_buf, &pub_len) != 0) {
+        free(priv_buf); free(pub_buf);
+        return crypto_keygen(alg, out_priv, out_pub);
+    }
+
+    if (alg == CRYPTO_ALG_RSA4096) {
+        mbedtls_pk_context *pk = calloc(1, sizeof(*pk));
+        if (!pk) { free(priv_buf); free(pub_buf); return -1; }
+        mbedtls_pk_init(pk);
+        if (mbedtls_pk_parse_key(pk, priv_buf, priv_len, NULL, 0, NULL, NULL) != 0 ||
+            mbedtls_pk_parse_public_key(pk, pub_buf, pub_len) != 0) {
+            mbedtls_pk_free(pk); free(pk); free(priv_buf); free(pub_buf);
+            return crypto_keygen(alg, out_priv, out_pub);
+        }
+        free(priv_buf); free(pub_buf);
+        out_priv->alg = out_pub->alg = CRYPTO_ALG_RSA4096;
+        out_priv->key = pk;
+        out_pub->key = pk;
+        out_priv->key_len = out_pub->key_len = sizeof(*pk);
+        return 0;
+    } else if (alg == CRYPTO_ALG_MLDSA87) {
+        if (priv_len != PQCLEAN_MLDSA87_CLEAN_CRYPTO_SECRETKEYBYTES ||
+            pub_len != PQCLEAN_MLDSA87_CLEAN_CRYPTO_PUBLICKEYBYTES) {
+            free(priv_buf); free(pub_buf);
+            return crypto_keygen(alg, out_priv, out_pub);
+        }
+        out_priv->alg = out_pub->alg = CRYPTO_ALG_MLDSA87;
+        out_priv->key = priv_buf;
+        out_priv->key_len = priv_len;
+        out_pub->key = pub_buf;
+        out_pub->key_len = pub_len;
+        return 0;
+    } else {
+        /* LMS import of private keys is not supported in Mbed TLS */
+        free(priv_buf); free(pub_buf);
+        return crypto_keygen(alg, out_priv, out_pub);
+    }
+}
+
 int crypto_sign(crypto_alg alg, const crypto_key *priv, const uint8_t *msg, size_t msg_len,
                 uint8_t *sig, size_t *sig_len) {
     if (!priv || !msg || !sig || !sig_len)
@@ -100,17 +211,21 @@ int crypto_sign(crypto_alg alg, const crypto_key *priv, const uint8_t *msg, size
     if (mbedtls_ctr_drbg_seed(&drbg, mbedtls_entropy_func, &entropy, NULL, 0) != 0)
         return -1;
     if (alg == CRYPTO_ALG_RSA4096) {
-        mbedtls_rsa_context *rsa = priv->key;
+        mbedtls_pk_context *pk = priv->key;
         unsigned char hash[48];
         if (mbedtls_md(mbedtls_md_info_from_type(MBEDTLS_MD_SHA384),
-                       msg, msg_len, hash) != 0 ||
-            mbedtls_rsa_pkcs1_sign(rsa, rng_callback, &drbg,
-                                   MBEDTLS_MD_SHA384, 0, hash, sig) != 0) {
+                       msg, msg_len, hash) != 0) {
             mbedtls_ctr_drbg_free(&drbg);
             mbedtls_entropy_free(&entropy);
             return -1;
         }
-        *sig_len = mbedtls_rsa_get_len(rsa);
+        size_t sig_size = mbedtls_pk_get_len(pk);
+        if (mbedtls_pk_sign(pk, MBEDTLS_MD_SHA384, hash, sizeof(hash),
+                            sig, sig_size, sig_len, rng_callback, &drbg) != 0) {
+            mbedtls_ctr_drbg_free(&drbg);
+            mbedtls_entropy_free(&entropy);
+            return -1;
+        }
         mbedtls_ctr_drbg_free(&drbg);
         mbedtls_entropy_free(&entropy);
         return 0;
@@ -150,11 +265,10 @@ int crypto_verify(crypto_alg alg, const crypto_key *pub, const uint8_t *msg, siz
         return -1;
     unsigned char hash[48];
     if (alg == CRYPTO_ALG_RSA4096) {
-        mbedtls_rsa_context *rsa = pub->key;
+        mbedtls_pk_context *pk = pub->key;
         if (mbedtls_md(mbedtls_md_info_from_type(MBEDTLS_MD_SHA384),
                        msg, msg_len, hash) != 0 ||
-            mbedtls_rsa_pkcs1_verify(rsa, MBEDTLS_MD_SHA384, 0,
-                                     hash, sig) != 0)
+            mbedtls_pk_verify(pk, MBEDTLS_MD_SHA384, hash, sizeof(hash), sig, sig_len) != 0)
             return -1;
         return 0;
     } else if (alg == CRYPTO_ALG_LMS) {
@@ -172,34 +286,54 @@ int crypto_verify(crypto_alg alg, const crypto_key *pub, const uint8_t *msg, siz
     return -1;
 }
 
-int crypto_encrypt_aes256cbc(const uint8_t key[32], const uint8_t iv[16],
-                             const uint8_t *in, size_t len, uint8_t *out) {
+static int aes_setkey(mbedtls_aes_context *aes, const uint8_t *key, size_t bits, int enc)
+{
+    if (bits != 128 && bits != 192 && bits != 256)
+        return -1;
+    if (enc)
+        return mbedtls_aes_setkey_enc(aes, key, (unsigned int)bits);
+    else
+        return mbedtls_aes_setkey_dec(aes, key, (unsigned int)bits);
+}
+
+int crypto_encrypt_aescbc(const uint8_t *key, size_t bits,
+                          const uint8_t iv[16],
+                          const uint8_t *in, size_t len, uint8_t *out) {
     if (!key || !iv || !in || !out)
         return -1;
     mbedtls_aes_context aes;
     mbedtls_aes_init(&aes);
-    if (mbedtls_aes_setkey_enc(&aes, key, 256) != 0)
+    if (aes_setkey(&aes, key, bits, 1) != 0) {
+        mbedtls_aes_free(&aes);
         return -1;
+    }
     unsigned char iv_copy[16];
     memcpy(iv_copy, iv, 16);
-    if (mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_ENCRYPT, len, iv_copy, in, out) != 0)
+    if (mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_ENCRYPT, len, iv_copy, in, out) != 0) {
+        mbedtls_aes_free(&aes);
         return -1;
+    }
     mbedtls_aes_free(&aes);
     return 0;
 }
 
-int crypto_decrypt_aes256cbc(const uint8_t key[32], const uint8_t iv[16],
-                             const uint8_t *in, size_t len, uint8_t *out) {
+int crypto_decrypt_aescbc(const uint8_t *key, size_t bits,
+                          const uint8_t iv[16],
+                          const uint8_t *in, size_t len, uint8_t *out) {
     if (!key || !iv || !in || !out)
         return -1;
     mbedtls_aes_context aes;
     mbedtls_aes_init(&aes);
-    if (mbedtls_aes_setkey_dec(&aes, key, 256) != 0)
+    if (aes_setkey(&aes, key, bits, 0) != 0) {
+        mbedtls_aes_free(&aes);
         return -1;
+    }
     unsigned char iv_copy[16];
     memcpy(iv_copy, iv, 16);
-    if (mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_DECRYPT, len, iv_copy, in, out) != 0)
+    if (mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_DECRYPT, len, iv_copy, in, out) != 0) {
+        mbedtls_aes_free(&aes);
         return -1;
+    }
     mbedtls_aes_free(&aes);
     return 0;
 }
@@ -207,7 +341,7 @@ int crypto_decrypt_aes256cbc(const uint8_t key[32], const uint8_t iv[16],
 void crypto_free_key(crypto_key *key) {
     if (!key || !key->key) return;
     if (key->alg == CRYPTO_ALG_RSA4096) {
-        mbedtls_rsa_free((mbedtls_rsa_context *)key->key);
+        mbedtls_pk_free((mbedtls_pk_context *)key->key);
         free(key->key);
     } else if (key->alg == CRYPTO_ALG_LMS) {
         lms_pair *pair = key->key;

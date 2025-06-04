@@ -338,6 +338,13 @@ int crypto_decrypt_aescbc(const uint8_t *key, size_t bits,
     return 0;
 }
 
+int crypto_sha384(const uint8_t *in, size_t len, uint8_t out[48]) {
+    if (!in || !out)
+        return -1;
+    return mbedtls_md(mbedtls_md_info_from_type(MBEDTLS_MD_SHA384),
+                      in, len, out);
+}
+
 void crypto_free_key(crypto_key *key) {
     if (!key || !key->key) return;
     if (key->alg == CRYPTO_ALG_RSA4096) {

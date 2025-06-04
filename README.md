@@ -36,3 +36,4 @@ The Makefile assumes the library paths above and uses
 The API defined in `include/crypto.h` allows algorithm independent key
 generation, signing, verification and AES‑CBC encryption/decryption with
 128/192/256‑bit keys.
+It also exposes a helper to compute SHA‑384 digests of arbitrary data.

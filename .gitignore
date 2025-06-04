@@ -1,6 +1,6 @@
 libs/mbedtls/*
-!libs/mbedtls/README.md
+!libs/mbedtls/PLACEHOLDER
 libs/pqclean/*
-!libs/pqclean/README.md
+!libs/pqclean/PLACEHOLDER
 libcrypto.a
 *.o

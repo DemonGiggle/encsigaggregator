@@ -18,10 +18,10 @@ cd libs/pqclean && git checkout 448c71a8
 
 ## Building
 
-Run `make` to build a static library `libaggregator.a`.
+Run `make` to build a static library `libcrypto.a`.
 The Makefile assumes the library paths above.
 
 ## Usage
 
-The API defined in `include/aggregator.h` allows algorithm independent key
+The API defined in `include/crypto.h` allows algorithm independent key
 generation, signing, verification and AES‑CBC‑256 encryption/decryption.

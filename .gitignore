@@ -1,0 +1,6 @@
+libs/mbedtls/*
+!libs/mbedtls/README.md
+libs/pqclean/*
+!libs/pqclean/README.md
+libcrypto.a
+*.o

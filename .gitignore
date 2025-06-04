@@ -1,0 +1,6 @@
+libs/mbedtls/*
+!libs/mbedtls/README.md
+libs/pqclean/*
+!libs/pqclean/README.md
+libaggregator.a
+*.o

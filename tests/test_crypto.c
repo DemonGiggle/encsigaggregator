@@ -41,12 +41,13 @@ static void test_rsa_sign_verify(void **state) {
     crypto_key priv = {0}, pub = {0};
     assert_int_equal(crypto_keygen(CRYPTO_ALG_RSA4096, &priv, &pub), 0);
     const uint8_t msg[] = "test message";
-    uint8_t sig[512];
+    uint8_t sig[1024];
     size_t sig_len = sizeof(sig);
     assert_int_equal(crypto_sign(CRYPTO_ALG_RSA4096, &priv,
                                  msg, sizeof(msg) - 1,
                                  sig, &sig_len), 0);
-    assert_int_equal(sig_len, sizeof(sig));
+    assert_int_equal(sig_len, 512);
+    assert_true(sig_len < sizeof(sig));
     assert_int_equal(crypto_verify(CRYPTO_ALG_RSA4096, &pub,
                                    msg, sizeof(msg) - 1,
                                    sig, sig_len), 0);
@@ -61,12 +62,15 @@ static void test_lms_sign_verify(void **state) {
     assert_int_equal(crypto_keygen(CRYPTO_ALG_LMS, &priv, &pub), 0);
     const uint8_t msg[] = "test message";
     uint8_t sig[MBEDTLS_LMS_SIG_LEN(MBEDTLS_LMS_SHA256_M32_H10,
-                                    MBEDTLS_LMOTS_SHA256_N32_W8)];
+                                    MBEDTLS_LMOTS_SHA256_N32_W8) + 32];
     size_t sig_len = sizeof(sig);
     assert_int_equal(crypto_sign(CRYPTO_ALG_LMS, &priv,
                                  msg, sizeof(msg) - 1,
                                  sig, &sig_len), 0);
-    assert_int_equal(sig_len, sizeof(sig));
+    assert_int_equal(sig_len,
+                     MBEDTLS_LMS_SIG_LEN(MBEDTLS_LMS_SHA256_M32_H10,
+                                        MBEDTLS_LMOTS_SHA256_N32_W8));
+    assert_true(sig_len < sizeof(sig));
     assert_int_equal(crypto_verify(CRYPTO_ALG_LMS, &pub,
                                    msg, sizeof(msg) - 1,
                                    sig, sig_len), 0);
@@ -80,12 +84,13 @@ static void test_mldsa_sign_verify(void **state) {
     crypto_key priv = {0}, pub = {0};
     assert_int_equal(crypto_keygen(CRYPTO_ALG_MLDSA87, &priv, &pub), 0);
     const uint8_t msg[] = "test message";
-    uint8_t sig[PQCLEAN_MLDSA87_CLEAN_CRYPTO_BYTES];
+    uint8_t sig[PQCLEAN_MLDSA87_CLEAN_CRYPTO_BYTES + 32];
     size_t sig_len = sizeof(sig);
     assert_int_equal(crypto_sign(CRYPTO_ALG_MLDSA87, &priv,
                                  msg, sizeof(msg) - 1,
                                  sig, &sig_len), 0);
-    assert_int_equal(sig_len, sizeof(sig));
+    assert_int_equal(sig_len, PQCLEAN_MLDSA87_CLEAN_CRYPTO_BYTES);
+    assert_true(sig_len < sizeof(sig));
     assert_int_equal(crypto_verify(CRYPTO_ALG_MLDSA87, &pub,
                                    msg, sizeof(msg) - 1,
                                    sig, sig_len), 0);

@@ -31,6 +31,24 @@ Run `make` to build a static library `libcrypto.a`.
 The Makefile assumes the library paths above and uses
 `include/mbedtls_custom_config.h` as the Mbed TLS configuration.
 
+## Running Tests
+
+Unit tests are written with [CMocka](https://cmocka.org). Install the
+development package on Debian/Ubuntu systems via:
+
+```sh
+sudo apt-get update
+sudo apt-get install libcmocka-dev
+```
+
+After the dependencies and library sources are prepared, execute
+
+```sh
+make test
+```
+
+to build and run the suite located under `tests/`.
+
 ## Usage
 
 The API defined in `include/crypto.h` allows algorithm independent key

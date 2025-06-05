@@ -17,6 +17,9 @@ SRC = src/crypto.c \
 OBJ = $(SRC:.c=.o)
 TOOL_SRC = src/main.c src/cliopts.c
 TOOL_OBJ = $(TOOL_SRC:.c=.o)
+TEST_SRC = tests/test_crypto.c
+TEST_OBJ = $(TEST_SRC:.c=.o)
+TEST_BIN = tests/run_tests
 
 MBEDTLS_LIBS = $(MBEDTLS_DIR)/library/libmbedtls.a \
                $(MBEDTLS_DIR)/library/libmbedcrypto.a \
@@ -35,9 +38,15 @@ libcrypto.a: $(OBJ)
 	ar rcs $@ $^
 
 clean:
-	rm -f $(OBJ) $(TOOL_OBJ) libcrypto.a encsigtool
+	rm -f $(OBJ) $(TOOL_OBJ) $(TEST_OBJ) libcrypto.a encsigtool $(TEST_BIN)
 
 encsigtool: libcrypto.a $(TOOL_OBJ)
 	$(CC) $(CFLAGS) -o $@ $(TOOL_OBJ) -Wl,--start-group libcrypto.a $(LDFLAGS) -Wl,--end-group
 
-.PHONY: all clean
+$(TEST_BIN): libcrypto.a $(TEST_OBJ)
+	$(CC) $(CFLAGS) -o $@ $(TEST_OBJ) -Wl,--start-group libcrypto.a $(LDFLAGS) -Wl,--end-group -lcmocka
+
+test: $(TEST_BIN)
+	$(TEST_BIN)
+
+.PHONY: all clean test

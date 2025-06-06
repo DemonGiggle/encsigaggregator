@@ -43,10 +43,10 @@ clean:
 encsigtool: libcrypto.a $(TOOL_OBJ)
 	$(CC) $(CFLAGS) -o $@ $(TOOL_OBJ) -Wl,--start-group libcrypto.a $(LDFLAGS) -Wl,--end-group
 
-$(TEST_BIN): libcrypto.a $(TEST_OBJ)
+$(TEST_BIN): $(MBEDTLS_LIBS) $(PQ_LIB) libcrypto.a $(TEST_OBJ)
 	$(CC) $(CFLAGS) -o $@ $(TEST_OBJ) -Wl,--start-group libcrypto.a $(LDFLAGS) -Wl,--end-group -lcmocka
 
-test: $(TEST_BIN)
+test: $(MBEDTLS_LIBS) $(PQ_LIB) $(TEST_BIN)
 	$(TEST_BIN)
 
 .PHONY: all clean test

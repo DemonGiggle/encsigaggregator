@@ -8,6 +8,7 @@ PQCLEAN_DIR="libs/pqclean"
 if [ ! -d "$MBEDTLS_DIR/.git" ]; then
     rm -rf "$MBEDTLS_DIR"
     git clone --branch v3.6.0 --depth 1 https://github.com/Mbed-TLS/mbedtls.git "$MBEDTLS_DIR"
+    (cd "$MBEDTLS_DIR" && git submodule update --init)
 fi
 
 # Clone pqclean commit 448c71a8 if not present

@@ -22,6 +22,7 @@ void cli_usage(const char *prog)
 int cli_parse_args(int argc, char **argv, cli_options *o)
 {
     if (!o) return -1;
+    optind = 1;
     o->alg = CRYPTO_ALG_RSA4096;
     o->aes_bits = 256;
     o->infile = o->outfile = NULL;

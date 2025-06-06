@@ -3,6 +3,7 @@
 #include <setjmp.h>
 #include <cmocka.h>
 #include <string.h>
+
 #include <mbedtls/lms.h>
 #include "api.h"
 
@@ -98,13 +99,66 @@ static void test_mldsa_sign_verify(void **state) {
     crypto_free_key(&pub);
 }
 
-int main(void) {
-    const struct CMUnitTest tests[] = {
-        cmocka_unit_test(test_sha384),
-        cmocka_unit_test(test_aes_cbc),
-        cmocka_unit_test(test_rsa_sign_verify),
-        cmocka_unit_test(test_lms_sign_verify),
-        cmocka_unit_test(test_mldsa_sign_verify),
-    };
-    return cmocka_run_group_tests(tests, NULL, NULL);
+static void test_crypto_init_aes_invalid(void **state) {
+    (void)state;
+    uint8_t key[32];
+    uint8_t iv[16];
+    assert_int_equal(crypto_init_aes(100, NULL, NULL, key, iv), -1);
+    assert_int_equal(crypto_init_aes(128, NULL, NULL, NULL, iv), -1);
+    assert_int_equal(crypto_init_aes(128, NULL, NULL, key, NULL), -1);
 }
+
+static void test_crypto_sha384_invalid(void **state) {
+    (void)state;
+    uint8_t out[48];
+    assert_int_equal(crypto_sha384(NULL, 0, out), -1);
+    assert_int_equal(crypto_sha384((const uint8_t *)"a", 1, NULL), -1);
+}
+
+static void test_crypto_encrypt_invalid(void **state) {
+    (void)state;
+    uint8_t key[16] = {0};
+    uint8_t iv[16] = {0};
+    uint8_t in[16] = {0};
+    uint8_t out[16];
+    assert_int_equal(crypto_encrypt_aescbc(NULL, 128, iv, in, 16, out), -1);
+    assert_int_equal(crypto_encrypt_aescbc(key, 128, NULL, in, 16, out), -1);
+    assert_int_equal(crypto_encrypt_aescbc(key, 128, iv, NULL, 16, out), -1);
+    assert_int_equal(crypto_encrypt_aescbc(key, 128, iv, in, 16, NULL), -1);
+}
+
+static void test_crypto_sign_invalid(void **state) {
+    (void)state;
+    crypto_key priv = {0};
+    uint8_t sig[16];
+    size_t sig_len = sizeof(sig);
+    assert_int_equal(crypto_sign(CRYPTO_ALG_RSA4096, NULL, (uint8_t *)"a", 1, sig, &sig_len), -1);
+    assert_int_equal(crypto_sign(CRYPTO_ALG_RSA4096, &priv, NULL, 1, sig, &sig_len), -1);
+    assert_int_equal(crypto_sign(CRYPTO_ALG_RSA4096, &priv, (uint8_t *)"a", 1, NULL, &sig_len), -1);
+    assert_int_equal(crypto_sign(CRYPTO_ALG_RSA4096, &priv, (uint8_t *)"a", 1, sig, NULL), -1);
+}
+
+static void test_crypto_verify_invalid(void **state) {
+    (void)state;
+    crypto_key pub = {0};
+    uint8_t sig[16];
+    assert_int_equal(crypto_verify(CRYPTO_ALG_RSA4096, NULL, (uint8_t *)"a", 1, sig, 16), -1);
+    assert_int_equal(crypto_verify(CRYPTO_ALG_RSA4096, &pub, NULL, 1, sig, 16), -1);
+    assert_int_equal(crypto_verify(CRYPTO_ALG_RSA4096, &pub, (uint8_t *)"a", 1, NULL, 16), -1);
+}
+
+const struct CMUnitTest crypto_tests[] = {
+    cmocka_unit_test(test_sha384),
+    cmocka_unit_test(test_aes_cbc),
+    cmocka_unit_test(test_rsa_sign_verify),
+    cmocka_unit_test(test_lms_sign_verify),
+    cmocka_unit_test(test_mldsa_sign_verify),
+    cmocka_unit_test(test_crypto_init_aes_invalid),
+    cmocka_unit_test(test_crypto_sha384_invalid),
+    cmocka_unit_test(test_crypto_encrypt_invalid),
+    cmocka_unit_test(test_crypto_sign_invalid),
+    cmocka_unit_test(test_crypto_verify_invalid),
+};
+
+const size_t crypto_tests_count =
+    sizeof(crypto_tests) / sizeof(crypto_tests[0]);

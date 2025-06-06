@@ -17,8 +17,8 @@ SRC = src/crypto.c \
 OBJ = $(SRC:.c=.o)
 TOOL_SRC = src/main.c src/cliopts.c
 TOOL_OBJ = $(TOOL_SRC:.c=.o)
-TEST_SRC = tests/test_crypto.c
-TEST_OBJ = $(TEST_SRC:.c=.o)
+TEST_SRC = tests/test_crypto.c tests/test_cli.c tests/test_runner.c
+TEST_OBJ = $(TEST_SRC:.c=.o) src/cliopts.o
 TEST_BIN = tests/run_tests
 
 MBEDTLS_LIBS = $(MBEDTLS_DIR)/library/libmbedtls.a \

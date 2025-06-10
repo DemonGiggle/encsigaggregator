@@ -25,6 +25,16 @@ git clone --branch v3.6.0 https://github.com/Mbed-TLS/mbedtls.git libs/mbedtls
 cd libs/pqclean && git checkout 448c71a8
 ```
 
+After cloning, fetch the Mbed TLS submodule, install the required Python
+packages and build both libraries:
+
+```sh
+git -C libs/mbedtls submodule update --init
+pip install jsonschema jinja2
+make -C libs/mbedtls lib
+make -C libs/pqclean/crypto_sign/ml-dsa-87/clean
+```
+
 ## Building
 
 Run `make` to build a static library `libcrypto.a`.

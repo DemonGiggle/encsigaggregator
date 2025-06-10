@@ -4,7 +4,8 @@ PQCLEAN_DIR ?= libs/pqclean
 CFLAGS += -Iinclude -I$(MBEDTLS_DIR)/include \
         -I$(PQCLEAN_DIR)/crypto_sign/ml-dsa-87/clean \
         -I$(PQCLEAN_DIR)/common \
-        -DMBEDTLS_CONFIG_FILE='"mbedtls_custom_config.h"'
+        -DMBEDTLS_CONFIG_FILE='"mbedtls_custom_config.h"' \
+        -std=c99
 LDFLAGS += -L$(MBEDTLS_DIR)/library -lmbedtls -lmbedcrypto -lmbedx509 \
            -L$(PQCLEAN_DIR)/crypto_sign/ml-dsa-87/clean -lml-dsa-87_clean
 

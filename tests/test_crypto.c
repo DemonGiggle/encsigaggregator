@@ -9,9 +9,9 @@
 
 static void test_sha384(void **state) {
     (void)state;
-    uint8_t out[48];
+    uint8_t out[CRYPTO_SHA384_DIGEST_SIZE];
     assert_int_equal(crypto_sha384((const uint8_t *)"abc", 3, out), 0);
-    const uint8_t expected[48] = {
+    const uint8_t expected[CRYPTO_SHA384_DIGEST_SIZE] = {
         0xcb,0x00,0x75,0x3f,0x45,0xa3,0x5e,0x8b,
         0xb5,0xa0,0x3d,0x69,0x9a,0xc6,0x50,0x07,
         0x27,0x2c,0x32,0xab,0x0e,0xde,0xd1,0x63,
@@ -19,21 +19,21 @@ static void test_sha384(void **state) {
         0x80,0x86,0x07,0x2b,0xa1,0xe7,0xcc,0x23,
         0x58,0xba,0xec,0xa1,0x34,0xc8,0x25,0xa7
     };
-    assert_memory_equal(out, expected, 48);
+    assert_memory_equal(out, expected, CRYPTO_SHA384_DIGEST_SIZE);
 }
 
 static void test_aes_cbc(void **state) {
     (void)state;
-    uint8_t key[32];
-    uint8_t iv[16];
-    assert_int_equal(crypto_init_aes(256, NULL, NULL, key, iv), 0);
+    uint8_t key[CRYPTO_AES_MAX_KEY_SIZE];
+    uint8_t iv[CRYPTO_AES_IV_SIZE];
+    assert_int_equal(crypto_init_aes(CRYPTO_AES_KEY_BITS_256, NULL, NULL, key, iv), 0);
 
     const uint8_t plaintext[32] =
         "0123456789abcdef0123456789abcdef";
     uint8_t enc[32];
     uint8_t dec[32];
-    assert_int_equal(crypto_encrypt_aescbc(key, 256, iv, plaintext, 32, enc), 0);
-    assert_int_equal(crypto_decrypt_aescbc(key, 256, iv, enc, 32, dec), 0);
+    assert_int_equal(crypto_encrypt_aescbc(key, CRYPTO_AES_KEY_BITS_256, iv, plaintext, 32, enc), 0);
+    assert_int_equal(crypto_decrypt_aescbc(key, CRYPTO_AES_KEY_BITS_256, iv, enc, 32, dec), 0);
     assert_memory_equal(dec, plaintext, 32);
 }
 
@@ -47,7 +47,7 @@ static void test_rsa_sign_verify(void **state) {
     assert_int_equal(crypto_sign(CRYPTO_ALG_RSA4096, &priv,
                                  msg, sizeof(msg) - 1,
                                  sig, &sig_len), 0);
-    assert_int_equal(sig_len, 512);
+    assert_int_equal(sig_len, CRYPTO_RSA_SIG_SIZE);
     assert_true(sig_len < sizeof(sig));
     assert_int_equal(crypto_verify(CRYPTO_ALG_RSA4096, &pub,
                                    msg, sizeof(msg) - 1,
@@ -101,30 +101,30 @@ static void test_mldsa_sign_verify(void **state) {
 
 static void test_crypto_init_aes_invalid(void **state) {
     (void)state;
-    uint8_t key[32];
-    uint8_t iv[16];
+    uint8_t key[CRYPTO_AES_MAX_KEY_SIZE];
+    uint8_t iv[CRYPTO_AES_IV_SIZE];
     assert_int_equal(crypto_init_aes(100, NULL, NULL, key, iv), -1);
-    assert_int_equal(crypto_init_aes(128, NULL, NULL, NULL, iv), -1);
-    assert_int_equal(crypto_init_aes(128, NULL, NULL, key, NULL), -1);
+    assert_int_equal(crypto_init_aes(CRYPTO_AES_KEY_BITS_128, NULL, NULL, NULL, iv), -1);
+    assert_int_equal(crypto_init_aes(CRYPTO_AES_KEY_BITS_128, NULL, NULL, key, NULL), -1);
 }
 
 static void test_crypto_sha384_invalid(void **state) {
     (void)state;
-    uint8_t out[48];
+    uint8_t out[CRYPTO_SHA384_DIGEST_SIZE];
     assert_int_equal(crypto_sha384(NULL, 0, out), -1);
     assert_int_equal(crypto_sha384((const uint8_t *)"a", 1, NULL), -1);
 }
 
 static void test_crypto_encrypt_invalid(void **state) {
     (void)state;
-    uint8_t key[16] = {0};
-    uint8_t iv[16] = {0};
-    uint8_t in[16] = {0};
-    uint8_t out[16];
-    assert_int_equal(crypto_encrypt_aescbc(NULL, 128, iv, in, 16, out), -1);
-    assert_int_equal(crypto_encrypt_aescbc(key, 128, NULL, in, 16, out), -1);
-    assert_int_equal(crypto_encrypt_aescbc(key, 128, iv, NULL, 16, out), -1);
-    assert_int_equal(crypto_encrypt_aescbc(key, 128, iv, in, 16, NULL), -1);
+    uint8_t key[CRYPTO_AES_IV_SIZE] = {0};
+    uint8_t iv[CRYPTO_AES_IV_SIZE] = {0};
+    uint8_t in[CRYPTO_AES_IV_SIZE] = {0};
+    uint8_t out[CRYPTO_AES_IV_SIZE];
+    assert_int_equal(crypto_encrypt_aescbc(NULL, CRYPTO_AES_KEY_BITS_128, iv, in, CRYPTO_AES_IV_SIZE, out), -1);
+    assert_int_equal(crypto_encrypt_aescbc(key, CRYPTO_AES_KEY_BITS_128, NULL, in, CRYPTO_AES_IV_SIZE, out), -1);
+    assert_int_equal(crypto_encrypt_aescbc(key, CRYPTO_AES_KEY_BITS_128, iv, NULL, CRYPTO_AES_IV_SIZE, out), -1);
+    assert_int_equal(crypto_encrypt_aescbc(key, CRYPTO_AES_KEY_BITS_128, iv, in, CRYPTO_AES_IV_SIZE, NULL), -1);
 }
 
 static void test_crypto_sign_invalid(void **state) {

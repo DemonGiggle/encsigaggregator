@@ -38,7 +38,7 @@ void test_cli_valid_minimal(void **state) {
     cli_options opts;
     assert_int_equal(cli_parse_args(5, argv, &opts), 0);
     assert_int_equal(opts.alg, CRYPTO_ALG_RSA4096);
-    assert_int_equal(opts.aes_bits, 256);
+    assert_int_equal(opts.aes_bits, CRYPTO_AES_KEY_BITS_256);
     assert_string_equal(opts.infile, "in");
     assert_string_equal(opts.outfile, "out");
 }

@@ -40,9 +40,12 @@ static int rng_callback(void *ctx, unsigned char *out, size_t len) {
 }
 
 int crypto_init_aes(size_t bits, const char *key_path, const char *iv_path,
-                    uint8_t *key_out, uint8_t iv_out[16])
+                    uint8_t *key_out, uint8_t iv_out[CRYPTO_AES_IV_SIZE])
 {
-    if (!key_out || !iv_out || (bits != 128 && bits != 192 && bits != 256))
+    if (!key_out || !iv_out ||
+        (bits != CRYPTO_AES_KEY_BITS_128 &&
+         bits != CRYPTO_AES_KEY_BITS_192 &&
+         bits != CRYPTO_AES_KEY_BITS_256))
         return -1;
 
     mbedtls_entropy_context ent;
@@ -63,12 +66,12 @@ int crypto_init_aes(size_t bits, const char *key_path, const char *iv_path,
     }
 
     tmp = NULL; len = 0;
-    if (iv_path && read_file(iv_path, &tmp, &len) == 0 && len == 16) {
-        memcpy(iv_out, tmp, 16);
+    if (iv_path && read_file(iv_path, &tmp, &len) == 0 && len == CRYPTO_AES_IV_SIZE) {
+        memcpy(iv_out, tmp, CRYPTO_AES_IV_SIZE);
         free(tmp);
     } else {
         if (tmp) free(tmp);
-        mbedtls_ctr_drbg_random(&drbg, iv_out, 16);
+        mbedtls_ctr_drbg_random(&drbg, iv_out, CRYPTO_AES_IV_SIZE);
     }
 
     mbedtls_ctr_drbg_free(&drbg);
@@ -95,7 +98,8 @@ int crypto_keygen(crypto_alg alg, crypto_key *out_priv, crypto_key *out_pub) {
             free(pk);
             return -1;
         }
-        if (mbedtls_rsa_gen_key(mbedtls_pk_rsa(*pk), rng_callback, &drbg, 4096, 65537) != 0) {
+        if (mbedtls_rsa_gen_key(mbedtls_pk_rsa(*pk), rng_callback, &drbg,
+                                CRYPTO_RSA_BITS, CRYPTO_RSA_EXPONENT) != 0) {
             mbedtls_pk_free(pk);
             free(pk);
             return -1;
@@ -110,7 +114,7 @@ int crypto_keygen(crypto_alg alg, crypto_key *out_priv, crypto_key *out_pub) {
         if (!pair) return -1;
         mbedtls_lms_private_init(&pair->priv);
         mbedtls_lms_public_init(&pair->pub);
-        unsigned char seed[32];
+        unsigned char seed[CRYPTO_LMS_SEED_SIZE];
         if (mbedtls_ctr_drbg_random(&drbg, seed, sizeof(seed)) != 0 ||
             mbedtls_lms_generate_private_key(&pair->priv,
                                              MBEDTLS_LMS_SHA256_M32_H10,
@@ -212,7 +216,7 @@ int crypto_sign(crypto_alg alg, const crypto_key *priv, const uint8_t *msg, size
         return -1;
     if (alg == CRYPTO_ALG_RSA4096) {
         mbedtls_pk_context *pk = priv->key;
-        unsigned char hash[48];
+        unsigned char hash[CRYPTO_SHA384_DIGEST_SIZE];
         if (mbedtls_md(mbedtls_md_info_from_type(MBEDTLS_MD_SHA384),
                        msg, msg_len, hash) != 0) {
             mbedtls_ctr_drbg_free(&drbg);
@@ -263,7 +267,7 @@ int crypto_verify(crypto_alg alg, const crypto_key *pub, const uint8_t *msg, siz
         return -1;
     if (alg != pub->alg)
         return -1;
-    unsigned char hash[48];
+    unsigned char hash[CRYPTO_SHA384_DIGEST_SIZE];
     if (alg == CRYPTO_ALG_RSA4096) {
         mbedtls_pk_context *pk = pub->key;
         if (mbedtls_md(mbedtls_md_info_from_type(MBEDTLS_MD_SHA384),
@@ -288,7 +292,9 @@ int crypto_verify(crypto_alg alg, const crypto_key *pub, const uint8_t *msg, siz
 
 static int aes_setkey(mbedtls_aes_context *aes, const uint8_t *key, size_t bits, int enc)
 {
-    if (bits != 128 && bits != 192 && bits != 256)
+    if (bits != CRYPTO_AES_KEY_BITS_128 &&
+        bits != CRYPTO_AES_KEY_BITS_192 &&
+        bits != CRYPTO_AES_KEY_BITS_256)
         return -1;
     if (enc)
         return mbedtls_aes_setkey_enc(aes, key, (unsigned int)bits);
@@ -297,7 +303,7 @@ static int aes_setkey(mbedtls_aes_context *aes, const uint8_t *key, size_t bits,
 }
 
 int crypto_encrypt_aescbc(const uint8_t *key, size_t bits,
-                          const uint8_t iv[16],
+                          const uint8_t iv[CRYPTO_AES_IV_SIZE],
                           const uint8_t *in, size_t len, uint8_t *out) {
     if (!key || !iv || !in || !out)
         return -1;
@@ -307,8 +313,8 @@ int crypto_encrypt_aescbc(const uint8_t *key, size_t bits,
         mbedtls_aes_free(&aes);
         return -1;
     }
-    unsigned char iv_copy[16];
-    memcpy(iv_copy, iv, 16);
+    unsigned char iv_copy[CRYPTO_AES_IV_SIZE];
+    memcpy(iv_copy, iv, CRYPTO_AES_IV_SIZE);
     if (mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_ENCRYPT, len, iv_copy, in, out) != 0) {
         mbedtls_aes_free(&aes);
         return -1;
@@ -318,7 +324,7 @@ int crypto_encrypt_aescbc(const uint8_t *key, size_t bits,
 }
 
 int crypto_decrypt_aescbc(const uint8_t *key, size_t bits,
-                          const uint8_t iv[16],
+                          const uint8_t iv[CRYPTO_AES_IV_SIZE],
                           const uint8_t *in, size_t len, uint8_t *out) {
     if (!key || !iv || !in || !out)
         return -1;
@@ -328,8 +334,8 @@ int crypto_decrypt_aescbc(const uint8_t *key, size_t bits,
         mbedtls_aes_free(&aes);
         return -1;
     }
-    unsigned char iv_copy[16];
-    memcpy(iv_copy, iv, 16);
+    unsigned char iv_copy[CRYPTO_AES_IV_SIZE];
+    memcpy(iv_copy, iv, CRYPTO_AES_IV_SIZE);
     if (mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_DECRYPT, len, iv_copy, in, out) != 0) {
         mbedtls_aes_free(&aes);
         return -1;
@@ -338,7 +344,8 @@ int crypto_decrypt_aescbc(const uint8_t *key, size_t bits,
     return 0;
 }
 
-int crypto_sha384(const uint8_t *in, size_t len, uint8_t out[48]) {
+int crypto_sha384(const uint8_t *in, size_t len,
+                  uint8_t out[CRYPTO_SHA384_DIGEST_SIZE]) {
     if (!in || !out)
         return -1;
     return mbedtls_md(mbedtls_md_info_from_type(MBEDTLS_MD_SHA384),

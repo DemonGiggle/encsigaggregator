@@ -26,7 +26,8 @@ static int read_file(const char *path, uint8_t **buf, size_t *len)
 /* write result to the output file, optionally including generated keys */
 static int write_output(const char *path, int include_keys, const crypto_key *priv,
                         const crypto_key *pub, size_t aes_bits,
-                        const uint8_t aes_key[32], const uint8_t iv[16],
+                        const uint8_t aes_key[CRYPTO_AES_MAX_KEY_SIZE],
+                        const uint8_t iv[CRYPTO_AES_IV_SIZE],
                         const uint8_t *sig, size_t sig_len,
                         const uint8_t *enc, size_t enc_len)
 {
@@ -36,7 +37,7 @@ static int write_output(const char *path, int include_keys, const crypto_key *pr
     if (include_keys) {
         uint32_t v = (uint32_t)aes_bits;
         fwrite(&v, sizeof(v), 1, f);
-        fwrite(iv, 1, 16, f);
+        fwrite(iv, 1, CRYPTO_AES_IV_SIZE, f);
         fwrite(aes_key, 1, aes_bits/8, f);
         v = (uint32_t)priv->key_len; fwrite(&v, sizeof(v), 1, f); fwrite(priv->key, 1, priv->key_len, f);
         v = (uint32_t)pub->key_len; fwrite(&v, sizeof(v), 1, f); fwrite(pub->key, 1, pub->key_len, f);
@@ -79,8 +80,8 @@ int main(int argc, char **argv) {
     }
 
     /* Load or generate AES key and IV */
-    uint8_t aes_key[32];
-    uint8_t iv[16];
+    uint8_t aes_key[CRYPTO_AES_MAX_KEY_SIZE];
+    uint8_t iv[CRYPTO_AES_IV_SIZE];
     if (crypto_init_aes(opts.aes_bits, opts.aes_key_path, opts.aes_iv_path,
                         aes_key, iv) != 0) {
         fprintf(stderr, "AES init failed\n");
@@ -88,7 +89,7 @@ int main(int argc, char **argv) {
     }
 
     /* Sign the input */
-    size_t sig_len = 10240; /* large enough */
+    size_t sig_len = CRYPTO_MAX_SIG_SIZE; /* large enough */
     uint8_t *sig = malloc(sig_len);
     if (!sig) { free(buf); crypto_free_key(&priv); return 1; }
     if (crypto_sign(opts.alg, &priv, buf, fsize, sig, &sig_len) != 0) {

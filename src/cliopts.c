@@ -24,7 +24,7 @@ int cli_parse_args(int argc, char **argv, cli_options *o)
     if (!o) return -1;
     optind = 1;
     o->alg = CRYPTO_ALG_RSA4096;
-    o->aes_bits = 256;
+    o->aes_bits = CRYPTO_AES_KEY_BITS_256;
     o->infile = o->outfile = NULL;
     o->pk_path = o->sk_path = NULL;
     o->aes_key_path = o->aes_iv_path = NULL;
@@ -54,7 +54,9 @@ int cli_parse_args(int argc, char **argv, cli_options *o)
             break;
         case 'b':
             o->aes_bits = (size_t)atoi(optarg);
-            if (o->aes_bits != 128 && o->aes_bits != 192 && o->aes_bits != 256) {
+            if (o->aes_bits != CRYPTO_AES_KEY_BITS_128 &&
+                o->aes_bits != CRYPTO_AES_KEY_BITS_192 &&
+                o->aes_bits != CRYPTO_AES_KEY_BITS_256) {
                 fprintf(stderr, "Invalid AES bits\n");
                 return -1;
             }

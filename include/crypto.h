@@ -8,22 +8,29 @@
 extern "C" {
 #endif
 
-/* Algorithm related constants */
+/* AES key sizes in bits */
 #define CRYPTO_AES_KEY_BITS_128 128
 #define CRYPTO_AES_KEY_BITS_192 192
 #define CRYPTO_AES_KEY_BITS_256 256
 
+/* Size of the CBC initialization vector in bytes */
 #define CRYPTO_AES_IV_SIZE 16
+/* Maximum AES key size in bytes (AES-256) */
 #define CRYPTO_AES_MAX_KEY_SIZE 32
 
-#define CRYPTO_RSA_BITS 4096
-#define CRYPTO_RSA_EXPONENT 65537
+/* Parameters for RSA4096 key generation */
+#define CRYPTO_RSA_BITS 4096       /* modulus size in bits */
+#define CRYPTO_RSA_EXPONENT 65537  /* public exponent */
+/* RSA signature size in bytes for a 4096-bit key */
 #define CRYPTO_RSA_SIG_SIZE (CRYPTO_RSA_BITS / 8)
 
+/* Output size of SHA-384 in bytes */
 #define CRYPTO_SHA384_DIGEST_SIZE 48
 
+/* Length of the random seed used to generate LMS keys */
 #define CRYPTO_LMS_SEED_SIZE 32
 
+/* Buffer large enough to hold any supported signature */
 #define CRYPTO_MAX_SIG_SIZE 10240
 
 typedef enum {

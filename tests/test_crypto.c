@@ -42,7 +42,8 @@ static void test_rsa_sign_verify(void **state) {
     crypto_key priv = {0}, pub = {0};
     assert_int_equal(crypto_keygen(CRYPTO_ALG_RSA4096, &priv, &pub), 0);
     const uint8_t msg[] = "test message";
-    uint8_t sig[1024];
+    /* large enough to hold the RSA signature */
+    uint8_t sig[CRYPTO_MAX_SIG_SIZE];
     size_t sig_len = 0; /* crypto_sign should update this */
     assert_int_equal(crypto_sign(CRYPTO_ALG_RSA4096, &priv,
                                  msg, sizeof(msg) - 1,

@@ -8,11 +8,11 @@ This project wraps several cryptographic algorithms with an abstract API.
 - [pqclean](https://github.com/pqclean/pqclean) commit **448c71a8**
 
 The sources for these libraries are expected inside `libs/mbedtls` and
-`libs/pqclean` respectively. A helper script is provided to fetch the
-correct versions automatically:
+`libs/pqclean` respectively. A helper script is provided to fetch and build
+the correct versions automatically:
 
 ```sh
-scripts/fetch_deps.sh
+scripts/install_third_party.sh
 ```
 
 The provided `include/mbedtls_custom_config.h` enables all algorithms
@@ -31,7 +31,8 @@ packages and build both libraries:
 ```sh
 git -C libs/mbedtls submodule update --init
 pip install jsonschema jinja2
-make -C libs/mbedtls lib
+cp include/mbedtls_custom_config.h libs/mbedtls/include/mbedtls
+make -C libs/mbedtls lib CFLAGS="-O2 -DMBEDTLS_CONFIG_FILE='\"mbedtls/mbedtls_custom_config.h\"'"
 make -C libs/pqclean/crypto_sign/ml-dsa-87/clean
 ```
 

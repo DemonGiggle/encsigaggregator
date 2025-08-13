@@ -51,6 +51,14 @@ void test_cli_rsa_lms(void **state) {
     assert_int_equal(opts.alg, CRYPTO_ALG_RSA4096_LMS);
 }
 
+void test_cli_rsa_mldsa(void **state) {
+    (void)state;
+    char *argv[] = {"prog", "-a", "rsa-mldsa87", "-i", "in", "-o", "out", NULL};
+    cli_options opts;
+    assert_int_equal(cli_parse_args(7, argv, &opts), 0);
+    assert_int_equal(opts.alg, CRYPTO_ALG_RSA4096_MLDSA87);
+}
+
 void test_cli_lms_mldsa(void **state) {
     (void)state;
     char *argv[] = {"prog", "-a", "lms-mldsa87", "-i", "in", "-o", "out", NULL};
@@ -67,6 +75,7 @@ const struct CMUnitTest cli_tests[] = {
     cmocka_unit_test(test_cli_missing_outfile),
     cmocka_unit_test(test_cli_valid_minimal),
     cmocka_unit_test(test_cli_rsa_lms),
+    cmocka_unit_test(test_cli_rsa_mldsa),
     cmocka_unit_test(test_cli_lms_mldsa),
 };
 

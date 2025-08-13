@@ -9,7 +9,7 @@ void cli_usage(const char *prog)
     fprintf(stderr,
             "Usage: %s [-a alg] [-b bits] [--pk-path f --sk-path f --aes-key-path f --aes-iv f] -i in -o out\n",
             prog);
-    fprintf(stderr, "  -a <alg>            signing algorithm: rsa,lms,mldsa87\n");
+    fprintf(stderr, "  -a <alg>            signing algorithm: rsa,lms,mldsa87,rsa-lms,rsa-mldsa87,lms-mldsa87\n");
     fprintf(stderr, "  -b <bits>           AES key bits: 128,192,256\n");
     fprintf(stderr, "  --pk-path <file>    public key file\n");
     fprintf(stderr, "  --sk-path <file>    private key file\n");
@@ -47,6 +47,12 @@ int cli_parse_args(int argc, char **argv, cli_options *o)
                 o->alg = CRYPTO_ALG_LMS;
             else if (strcmp(optarg, "mldsa87") == 0)
                 o->alg = CRYPTO_ALG_MLDSA87;
+            else if (strcmp(optarg, "rsa-lms") == 0)
+                o->alg = CRYPTO_ALG_RSA4096_LMS;
+            else if (strcmp(optarg, "rsa-mldsa87") == 0)
+                o->alg = CRYPTO_ALG_RSA4096_MLDSA87;
+            else if (strcmp(optarg, "lms-mldsa87") == 0)
+                o->alg = CRYPTO_ALG_LMS_MLDSA87;
             else {
                 fprintf(stderr, "Unknown algorithm %s\n", optarg);
                 return -1;

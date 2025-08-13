@@ -18,6 +18,16 @@ typedef struct {
     mbedtls_lms_public_t pub;
 } lms_pair;
 
+typedef struct {
+    crypto_key first_priv;
+    crypto_key first_pub;
+    crypto_key second_priv;
+    crypto_key second_pub;
+} hybrid_pair;
+
+#define LMS_SIG_LEN \
+    MBEDTLS_LMS_SIG_LEN(MBEDTLS_LMS_SHA256_M32_H10, MBEDTLS_LMOTS_SHA256_N32_W8)
+
 static int read_file(const char *path, unsigned char **buf, size_t *len)
 {
     FILE *f = fopen(path, "rb");
@@ -148,6 +158,37 @@ int crypto_keygen(crypto_alg alg, crypto_key *out_priv, crypto_key *out_pub) {
         out_priv->key = sk;
         out_priv->key_len = PQCLEAN_MLDSA87_CLEAN_CRYPTO_SECRETKEYBYTES;
         return 0;
+    } else if (alg == CRYPTO_ALG_RSA4096_LMS ||
+               alg == CRYPTO_ALG_RSA4096_MLDSA87 ||
+               alg == CRYPTO_ALG_LMS_MLDSA87) {
+        hybrid_pair *pair = calloc(1, sizeof(*pair));
+        if (!pair) return -1;
+        crypto_alg first, second;
+        if (alg == CRYPTO_ALG_RSA4096_LMS) {
+            first = CRYPTO_ALG_RSA4096;
+            second = CRYPTO_ALG_LMS;
+        } else if (alg == CRYPTO_ALG_RSA4096_MLDSA87) {
+            first = CRYPTO_ALG_RSA4096;
+            second = CRYPTO_ALG_MLDSA87;
+        } else {
+            first = CRYPTO_ALG_LMS;
+            second = CRYPTO_ALG_MLDSA87;
+        }
+        if (crypto_keygen(first, &pair->first_priv, &pair->first_pub) != 0 ||
+            crypto_keygen(second, &pair->second_priv, &pair->second_pub) != 0) {
+            crypto_free_key(&pair->first_priv);
+            pair->first_pub.key = NULL;
+            crypto_free_key(&pair->first_pub);
+            crypto_free_key(&pair->second_priv);
+            pair->second_pub.key = NULL;
+            crypto_free_key(&pair->second_pub);
+            free(pair);
+            return -1;
+        }
+        out_priv->alg = out_pub->alg = alg;
+        out_priv->key = out_pub->key = pair;
+        out_priv->key_len = out_pub->key_len = sizeof(*pair);
+        return 0;
     }
     return -1;
 }
@@ -158,6 +199,11 @@ int crypto_load_keypair(crypto_alg alg, const char *priv_path, const char *pub_p
     if (!out_priv || !out_pub)
         return -1;
     if (!priv_path || !pub_path)
+        return crypto_keygen(alg, out_priv, out_pub);
+
+    if (alg == CRYPTO_ALG_RSA4096_LMS ||
+        alg == CRYPTO_ALG_RSA4096_MLDSA87 ||
+        alg == CRYPTO_ALG_LMS_MLDSA87)
         return crypto_keygen(alg, out_priv, out_pub);
 
     unsigned char *priv_buf = NULL, *pub_buf = NULL;
@@ -257,6 +303,46 @@ int crypto_sign(crypto_alg alg, const crypto_key *priv, const uint8_t *msg, size
         mbedtls_ctr_drbg_free(&drbg);
         mbedtls_entropy_free(&entropy);
         return 0;
+    } else if (alg == CRYPTO_ALG_RSA4096_LMS ||
+               alg == CRYPTO_ALG_RSA4096_MLDSA87 ||
+               alg == CRYPTO_ALG_LMS_MLDSA87) {
+        hybrid_pair *pair = priv->key;
+        size_t len1 = 0, len2 = 0;
+        crypto_alg first, second;
+        if (alg == CRYPTO_ALG_RSA4096_LMS) {
+            first = CRYPTO_ALG_RSA4096;
+            second = CRYPTO_ALG_LMS;
+            len1 = CRYPTO_RSA_SIG_SIZE;
+            len2 = LMS_SIG_LEN;
+        } else if (alg == CRYPTO_ALG_RSA4096_MLDSA87) {
+            first = CRYPTO_ALG_RSA4096;
+            second = CRYPTO_ALG_MLDSA87;
+            len1 = CRYPTO_RSA_SIG_SIZE;
+            len2 = PQCLEAN_MLDSA87_CLEAN_CRYPTO_BYTES;
+        } else {
+            first = CRYPTO_ALG_LMS;
+            second = CRYPTO_ALG_MLDSA87;
+            len1 = LMS_SIG_LEN;
+            len2 = PQCLEAN_MLDSA87_CLEAN_CRYPTO_BYTES;
+        }
+        size_t tmp = len1;
+        if (crypto_sign(first, &pair->first_priv, msg, msg_len, sig, &tmp) != 0 ||
+            tmp != len1) {
+            mbedtls_ctr_drbg_free(&drbg);
+            mbedtls_entropy_free(&entropy);
+            return -1;
+        }
+        tmp = len2;
+        if (crypto_sign(second, &pair->second_priv, msg, msg_len, sig + len1, &tmp) != 0 ||
+            tmp != len2) {
+            mbedtls_ctr_drbg_free(&drbg);
+            mbedtls_entropy_free(&entropy);
+            return -1;
+        }
+        *sig_len = len1 + len2;
+        mbedtls_ctr_drbg_free(&drbg);
+        mbedtls_entropy_free(&entropy);
+        return 0;
     }
     return -1;
 }
@@ -284,6 +370,35 @@ int crypto_verify(crypto_alg alg, const crypto_key *pub, const uint8_t *msg, siz
         if (PQCLEAN_MLDSA87_CLEAN_crypto_sign_verify(sig, sig_len,
                                                      msg, msg_len,
                                                      pub->key) != 0)
+            return -1;
+        return 0;
+    } else if (alg == CRYPTO_ALG_RSA4096_LMS ||
+               alg == CRYPTO_ALG_RSA4096_MLDSA87 ||
+               alg == CRYPTO_ALG_LMS_MLDSA87) {
+        hybrid_pair *pair = pub->key;
+        size_t len1 = 0, len2 = 0;
+        crypto_alg first, second;
+        if (alg == CRYPTO_ALG_RSA4096_LMS) {
+            first = CRYPTO_ALG_RSA4096;
+            second = CRYPTO_ALG_LMS;
+            len1 = CRYPTO_RSA_SIG_SIZE;
+            len2 = LMS_SIG_LEN;
+        } else if (alg == CRYPTO_ALG_RSA4096_MLDSA87) {
+            first = CRYPTO_ALG_RSA4096;
+            second = CRYPTO_ALG_MLDSA87;
+            len1 = CRYPTO_RSA_SIG_SIZE;
+            len2 = PQCLEAN_MLDSA87_CLEAN_CRYPTO_BYTES;
+        } else {
+            first = CRYPTO_ALG_LMS;
+            second = CRYPTO_ALG_MLDSA87;
+            len1 = LMS_SIG_LEN;
+            len2 = PQCLEAN_MLDSA87_CLEAN_CRYPTO_BYTES;
+        }
+        if (sig_len != len1 + len2)
+            return -1;
+        if (crypto_verify(first, &pair->first_pub, msg, msg_len, sig, len1) != 0)
+            return -1;
+        if (crypto_verify(second, &pair->second_pub, msg, msg_len, sig + len1, len2) != 0)
             return -1;
         return 0;
     }
@@ -364,6 +479,17 @@ void crypto_free_key(crypto_key *key) {
         free(pair);
     } else if (key->alg == CRYPTO_ALG_MLDSA87) {
         free(key->key);
+    } else if (key->alg == CRYPTO_ALG_RSA4096_LMS ||
+               key->alg == CRYPTO_ALG_RSA4096_MLDSA87 ||
+               key->alg == CRYPTO_ALG_LMS_MLDSA87) {
+        hybrid_pair *pair = key->key;
+        crypto_free_key(&pair->first_priv);
+        pair->first_pub.key = NULL;
+        crypto_free_key(&pair->first_pub);
+        crypto_free_key(&pair->second_priv);
+        pair->second_pub.key = NULL;
+        crypto_free_key(&pair->second_pub);
+        free(pair);
     }
     key->key = NULL;
     key->key_len = 0;

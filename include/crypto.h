@@ -36,7 +36,10 @@ extern "C" {
 typedef enum {
     CRYPTO_ALG_RSA4096,
     CRYPTO_ALG_LMS,
-    CRYPTO_ALG_MLDSA87
+    CRYPTO_ALG_MLDSA87,
+    CRYPTO_ALG_RSA4096_LMS,
+    CRYPTO_ALG_RSA4096_MLDSA87,
+    CRYPTO_ALG_LMS_MLDSA87
 } crypto_alg;
 
 typedef struct {

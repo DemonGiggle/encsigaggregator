@@ -100,6 +100,70 @@ static void test_mldsa_sign_verify(void **state) {
     crypto_free_key(&pub);
 }
 
+static void test_rsa_lms_sign_verify(void **state) {
+    (void)state;
+    crypto_key priv = {0}, pub = {0};
+    assert_int_equal(crypto_keygen(CRYPTO_ALG_RSA4096_LMS, &priv, &pub), 0);
+    const uint8_t msg[] = "test message";
+    uint8_t sig[CRYPTO_MAX_SIG_SIZE];
+    size_t sig_len = sizeof(sig);
+    assert_int_equal(crypto_sign(CRYPTO_ALG_RSA4096_LMS, &priv,
+                                 msg, sizeof(msg) - 1,
+                                 sig, &sig_len), 0);
+    assert_int_equal(sig_len,
+                     CRYPTO_RSA_SIG_SIZE +
+                     MBEDTLS_LMS_SIG_LEN(MBEDTLS_LMS_SHA256_M32_H10,
+                                         MBEDTLS_LMOTS_SHA256_N32_W8));
+    assert_int_equal(crypto_verify(CRYPTO_ALG_RSA4096_LMS, &pub,
+                                   msg, sizeof(msg) - 1,
+                                   sig, sig_len), 0);
+    crypto_free_key(&priv);
+    pub.key = NULL;
+    crypto_free_key(&pub);
+}
+
+static void test_rsa_mldsa_sign_verify(void **state) {
+    (void)state;
+    crypto_key priv = {0}, pub = {0};
+    assert_int_equal(crypto_keygen(CRYPTO_ALG_RSA4096_MLDSA87, &priv, &pub), 0);
+    const uint8_t msg[] = "test message";
+    uint8_t sig[CRYPTO_MAX_SIG_SIZE];
+    size_t sig_len = sizeof(sig);
+    assert_int_equal(crypto_sign(CRYPTO_ALG_RSA4096_MLDSA87, &priv,
+                                 msg, sizeof(msg) - 1,
+                                 sig, &sig_len), 0);
+    assert_int_equal(sig_len,
+                     CRYPTO_RSA_SIG_SIZE + PQCLEAN_MLDSA87_CLEAN_CRYPTO_BYTES);
+    assert_int_equal(crypto_verify(CRYPTO_ALG_RSA4096_MLDSA87, &pub,
+                                   msg, sizeof(msg) - 1,
+                                   sig, sig_len), 0);
+    crypto_free_key(&priv);
+    pub.key = NULL;
+    crypto_free_key(&pub);
+}
+
+static void test_lms_mldsa_sign_verify(void **state) {
+    (void)state;
+    crypto_key priv = {0}, pub = {0};
+    assert_int_equal(crypto_keygen(CRYPTO_ALG_LMS_MLDSA87, &priv, &pub), 0);
+    const uint8_t msg[] = "test message";
+    uint8_t sig[CRYPTO_MAX_SIG_SIZE];
+    size_t sig_len = sizeof(sig);
+    assert_int_equal(crypto_sign(CRYPTO_ALG_LMS_MLDSA87, &priv,
+                                 msg, sizeof(msg) - 1,
+                                 sig, &sig_len), 0);
+    assert_int_equal(sig_len,
+                     MBEDTLS_LMS_SIG_LEN(MBEDTLS_LMS_SHA256_M32_H10,
+                                         MBEDTLS_LMOTS_SHA256_N32_W8) +
+                     PQCLEAN_MLDSA87_CLEAN_CRYPTO_BYTES);
+    assert_int_equal(crypto_verify(CRYPTO_ALG_LMS_MLDSA87, &pub,
+                                   msg, sizeof(msg) - 1,
+                                   sig, sig_len), 0);
+    crypto_free_key(&priv);
+    pub.key = NULL;
+    crypto_free_key(&pub);
+}
+
 static void test_crypto_init_aes_invalid(void **state) {
     (void)state;
     uint8_t key[CRYPTO_AES_MAX_KEY_SIZE];
@@ -154,6 +218,9 @@ const struct CMUnitTest crypto_tests[] = {
     cmocka_unit_test(test_rsa_sign_verify),
     cmocka_unit_test(test_lms_sign_verify),
     cmocka_unit_test(test_mldsa_sign_verify),
+    cmocka_unit_test(test_rsa_lms_sign_verify),
+    cmocka_unit_test(test_rsa_mldsa_sign_verify),
+    cmocka_unit_test(test_lms_mldsa_sign_verify),
     cmocka_unit_test(test_crypto_init_aes_invalid),
     cmocka_unit_test(test_crypto_sha384_invalid),
     cmocka_unit_test(test_crypto_encrypt_invalid),

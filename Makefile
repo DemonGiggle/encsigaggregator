@@ -9,7 +9,7 @@ CFLAGS += -Iinclude -I$(MBEDTLS_DIR)/include \
 LDFLAGS += -L$(MBEDTLS_DIR)/library -lmbedtls -lmbedcrypto -lmbedx509 \
            -L$(PQCLEAN_DIR)/crypto_sign/ml-dsa-87/clean -lml-dsa-87_clean
 
-SRC = src/crypto.c \
+SRC = src/crypto.c src/util.c \
        $(PQCLEAN_DIR)/common/randombytes.c \
        $(PQCLEAN_DIR)/common/fips202.c \
        $(PQCLEAN_DIR)/common/sha2.c \

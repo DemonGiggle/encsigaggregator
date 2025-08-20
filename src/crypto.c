@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include "util.h"
 
 #include <mbedtls/aes.h>
 #include <mbedtls/ctr_drbg.h>
@@ -28,22 +29,6 @@ typedef struct {
 #define LMS_SIG_LEN \
     MBEDTLS_LMS_SIG_LEN(MBEDTLS_LMS_SHA256_M32_H10, MBEDTLS_LMOTS_SHA256_N32_W8)
 
-static int read_file(const char *path, unsigned char **buf, size_t *len)
-{
-    FILE *f = fopen(path, "rb");
-    if (!f)
-        return -1;
-    fseek(f, 0, SEEK_END);
-    long sz = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    unsigned char *tmp = malloc(sz ? sz : 1);
-    if (!tmp) { fclose(f); return -1; }
-    if (fread(tmp, 1, sz, f) != (size_t)sz) { fclose(f); free(tmp); return -1; }
-    fclose(f);
-    *buf = tmp;
-    *len = sz;
-    return 0;
-}
 
 static int rng_callback(void *ctx, unsigned char *out, size_t len) {
     return mbedtls_ctr_drbg_random((mbedtls_ctr_drbg_context *)ctx, out, len);

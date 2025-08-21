@@ -42,6 +42,8 @@ Run `make` to build a static library `libcrypto.a`.
 The Makefile assumes the library paths above and uses
 `include/mbedtls_custom_config.h` as the Mbed TLS configuration.
 
+For a debug build of the example tool, invoke `make debug`.
+
 ## Running Tests
 
 Unit tests are written with [CMocka](https://cmocka.org). Install the

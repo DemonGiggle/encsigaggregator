@@ -50,4 +50,7 @@ $(TEST_BIN): $(MBEDTLS_LIBS) $(PQ_LIB) libcrypto.a $(TEST_OBJ)
 test: $(MBEDTLS_LIBS) $(PQ_LIB) $(TEST_BIN)
 	$(TEST_BIN)
 
-.PHONY: all clean test
+debug: CFLAGS += -g -O0
+debug: clean encsigtool
+
+.PHONY: all clean test debug

@@ -21,13 +21,19 @@ void cli_usage(const char *prog)
 
 int cli_parse_args(int argc, char **argv, cli_options *o)
 {
-    if (!o) return -1;
-    optind = 1;
-    o->alg = CRYPTO_ALG_RSA4096;
-    o->aes_bits = CRYPTO_AES_KEY_BITS_256;
-    o->infile = o->outfile = NULL;
-    o->pk_path = o->sk_path = NULL;
-    o->aes_key_path = o->aes_iv_path = NULL;
+    if (!o) {
+        return -1;
+    }
+
+    optind          = 1;
+    o->alg          = CRYPTO_ALG_RSA4096;
+    o->aes_bits     = CRYPTO_AES_KEY_BITS_256;
+    o->infile       = NULL;
+    o->outfile      = NULL;
+    o->pk_path      = NULL;
+    o->sk_path      = NULL;
+    o->aes_key_path = NULL;
+    o->aes_iv_path  = NULL;
 
     static const struct option long_opts[] = {
         {"pk-path", required_argument, NULL, 1},
@@ -41,19 +47,19 @@ int cli_parse_args(int argc, char **argv, cli_options *o)
     while ((opt = getopt_long(argc, argv, "a:b:i:o:", long_opts, NULL)) != -1) {
         switch (opt) {
         case 'a':
-            if (strcmp(optarg, "rsa") == 0)
+            if (strcmp(optarg, "rsa") == 0) {
                 o->alg = CRYPTO_ALG_RSA4096;
-            else if (strcmp(optarg, "lms") == 0)
+            } else if (strcmp(optarg, "lms") == 0) {
                 o->alg = CRYPTO_ALG_LMS;
-            else if (strcmp(optarg, "mldsa87") == 0)
+            } else if (strcmp(optarg, "mldsa87") == 0) {
                 o->alg = CRYPTO_ALG_MLDSA87;
-            else if (strcmp(optarg, "rsa-lms") == 0)
+            } else if (strcmp(optarg, "rsa-lms") == 0) {
                 o->alg = CRYPTO_ALG_RSA4096_LMS;
-            else if (strcmp(optarg, "rsa-mldsa87") == 0)
+            } else if (strcmp(optarg, "rsa-mldsa87") == 0) {
                 o->alg = CRYPTO_ALG_RSA4096_MLDSA87;
-            else if (strcmp(optarg, "lms-mldsa87") == 0)
+            } else if (strcmp(optarg, "lms-mldsa87") == 0) {
                 o->alg = CRYPTO_ALG_LMS_MLDSA87;
-            else {
+            } else {
                 fprintf(stderr, "Unknown algorithm %s\n", optarg);
                 return -1;
             }
@@ -95,6 +101,7 @@ int cli_parse_args(int argc, char **argv, cli_options *o)
         cli_usage(argv[0]);
         return -1;
     }
+
     return 0;
 }
 

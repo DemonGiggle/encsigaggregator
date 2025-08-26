@@ -81,8 +81,8 @@ int main(int argc, char **argv) {
         free(buf); free(sig); crypto_free_key(&priv); return 1; }
 
     /* Encrypt the input */
-    size_t enc_len =
-        ((fsize + CRYPTO_AES_IV_SIZE - 1) / CRYPTO_AES_IV_SIZE) * CRYPTO_AES_IV_SIZE;
+    size_t remainder = fsize % CRYPTO_AES_IV_SIZE;
+    size_t enc_len = fsize + (CRYPTO_AES_IV_SIZE - remainder);
     uint8_t *enc = malloc(enc_len);
     if (!enc) { free(buf); free(sig); crypto_free_key(&priv); return 1; }
     if (crypto_encrypt_aescbc(aes_key, opts.aes_bits, iv, buf, fsize, enc,

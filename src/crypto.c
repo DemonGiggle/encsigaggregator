@@ -408,15 +408,15 @@ int crypto_encrypt_aescbc(const uint8_t *key, size_t bits,
                           size_t *out_len) {
     if (!key || !iv || !in || !out || !out_len)
         return -1;
-    size_t padded_len =
-        ((len + CRYPTO_AES_IV_SIZE - 1) / CRYPTO_AES_IV_SIZE) * CRYPTO_AES_IV_SIZE;
-    unsigned char *buf = calloc(1, padded_len);
+    size_t pad = CRYPTO_AES_IV_SIZE - (len % CRYPTO_AES_IV_SIZE);
+    if (pad == 0)
+        pad = CRYPTO_AES_IV_SIZE;
+    size_t padded_len = len + pad;
+    unsigned char *buf = malloc(padded_len);
     if (!buf)
         return -1;
     memcpy(buf, in, len);
-    unsigned char pad = (unsigned char)(padded_len - len);
-    if (pad)
-        memset(buf + len, pad, pad);
+    memset(buf + len, (unsigned char)pad, pad);
     mbedtls_aes_context aes;
     mbedtls_aes_init(&aes);
     if (aes_setkey(&aes, key, bits, 1) != 0) {
@@ -442,7 +442,7 @@ int crypto_decrypt_aescbc(const uint8_t *key, size_t bits,
                           const uint8_t *in, size_t len, uint8_t *out,
                           size_t *out_len) {
     if (!key || !iv || !in || !out || !out_len ||
-        (len % CRYPTO_AES_IV_SIZE) != 0)
+        len == 0 || (len % CRYPTO_AES_IV_SIZE) != 0)
         return -1;
     unsigned char *buf = malloc(len);
     if (!buf)
@@ -463,18 +463,17 @@ int crypto_decrypt_aescbc(const uint8_t *key, size_t bits,
     }
     mbedtls_aes_free(&aes);
     unsigned char pad = buf[len - 1];
-    size_t plen = len;
-    if (pad > 0 && pad <= CRYPTO_AES_IV_SIZE) {
-        int valid = 1;
-        for (size_t i = 0; i < pad; ++i) {
-            if (buf[len - 1 - i] != pad) {
-                valid = 0;
-                break;
-            }
-        }
-        if (valid)
-            plen -= pad;
+    if (pad == 0 || pad > CRYPTO_AES_IV_SIZE || pad > len) {
+        free(buf);
+        return -1;
     }
+    for (size_t i = 0; i < pad; ++i) {
+        if (buf[len - 1 - i] != pad) {
+            free(buf);
+            return -1;
+        }
+    }
+    size_t plen = len - pad;
     memcpy(out, buf, plen);
     free(buf);
     *out_len = plen;

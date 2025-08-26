@@ -60,10 +60,12 @@ int crypto_verify(crypto_alg alg, const crypto_key *pub, const uint8_t *msg, siz
 
 int crypto_encrypt_aescbc(const uint8_t *key, size_t bits,
                           const uint8_t iv[CRYPTO_AES_IV_SIZE],
-                          const uint8_t *in, size_t len, uint8_t *out);
+                          const uint8_t *in, size_t len, uint8_t *out,
+                          size_t *out_len);
 int crypto_decrypt_aescbc(const uint8_t *key, size_t bits,
                           const uint8_t iv[CRYPTO_AES_IV_SIZE],
-                          const uint8_t *in, size_t len, uint8_t *out);
+                          const uint8_t *in, size_t len, uint8_t *out,
+                          size_t *out_len);
 
 int crypto_sha384(const uint8_t *in, size_t len,
                   uint8_t out[CRYPTO_SHA384_DIGEST_SIZE]);

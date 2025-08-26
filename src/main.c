@@ -81,15 +81,18 @@ int main(int argc, char **argv) {
         free(buf); free(sig); crypto_free_key(&priv); return 1; }
 
     /* Encrypt the input */
-    uint8_t *enc = malloc(fsize);
+    size_t enc_len =
+        ((fsize + CRYPTO_AES_IV_SIZE - 1) / CRYPTO_AES_IV_SIZE) * CRYPTO_AES_IV_SIZE;
+    uint8_t *enc = malloc(enc_len);
     if (!enc) { free(buf); free(sig); crypto_free_key(&priv); return 1; }
-    if (crypto_encrypt_aescbc(aes_key, opts.aes_bits, iv, buf, fsize, enc) != 0) {
+    if (crypto_encrypt_aescbc(aes_key, opts.aes_bits, iv, buf, fsize, enc,
+                              &enc_len) != 0) {
         fprintf(stderr, "Encryption failed\n");
         free(buf); free(sig); free(enc); crypto_free_key(&priv); return 1; }
 
     /* Write everything to the requested output */
     if (write_output(opts.outfile, generate, &priv, &pub, opts.aes_bits,
-                     aes_key, iv, sig, sig_len, enc, fsize) != 0) {
+                     aes_key, iv, sig, sig_len, enc, enc_len) != 0) {
         fprintf(stderr, "Write failed\n");
         free(buf); free(sig); free(enc); crypto_free_key(&priv); return 1;
     }

@@ -30,11 +30,57 @@ static void test_aes_cbc(void **state) {
 
     const uint8_t plaintext[32] =
         "0123456789abcdef0123456789abcdef";
-    uint8_t enc[32];
+    uint8_t enc[48];
+    size_t enc_len = 0;
     uint8_t dec[32];
-    assert_int_equal(crypto_encrypt_aescbc(key, CRYPTO_AES_KEY_BITS_256, iv, plaintext, 32, enc), 0);
-    assert_int_equal(crypto_decrypt_aescbc(key, CRYPTO_AES_KEY_BITS_256, iv, enc, 32, dec), 0);
+    size_t dec_len = 0;
+    assert_int_equal(crypto_encrypt_aescbc(key, CRYPTO_AES_KEY_BITS_256, iv,
+                                          plaintext, 32, enc, &enc_len), 0);
+    assert_int_equal(enc_len, 48);
+    assert_int_equal(crypto_decrypt_aescbc(key, CRYPTO_AES_KEY_BITS_256, iv,
+                                          enc, enc_len, dec, &dec_len), 0);
+    assert_int_equal(dec_len, 32);
     assert_memory_equal(dec, plaintext, 32);
+}
+
+static void test_aes_cbc_unaligned(void **state) {
+    (void)state;
+    uint8_t key[CRYPTO_AES_MAX_KEY_SIZE];
+    uint8_t iv[CRYPTO_AES_IV_SIZE];
+    assert_int_equal(crypto_init_aes(CRYPTO_AES_KEY_BITS_256, NULL, NULL, key, iv), 0);
+
+    const uint8_t plaintext[] = "unaligned payload";
+    uint8_t enc[32];
+    size_t enc_len = 0;
+    uint8_t dec[32];
+    size_t dec_len = 0;
+    assert_int_equal(crypto_encrypt_aescbc(key, CRYPTO_AES_KEY_BITS_256, iv,
+                                          plaintext, sizeof(plaintext) - 1,
+                                          enc, &enc_len), 0);
+    assert_int_equal(enc_len, 32);
+    assert_int_equal(crypto_decrypt_aescbc(key, CRYPTO_AES_KEY_BITS_256, iv,
+                                          enc, enc_len, dec, &dec_len), 0);
+    assert_int_equal(dec_len, sizeof(plaintext) - 1);
+    assert_memory_equal(dec, plaintext, sizeof(plaintext) - 1);
+}
+
+static void test_aes_cbc_empty(void **state) {
+    (void)state;
+    uint8_t key[CRYPTO_AES_MAX_KEY_SIZE];
+    uint8_t iv[CRYPTO_AES_IV_SIZE];
+    assert_int_equal(crypto_init_aes(CRYPTO_AES_KEY_BITS_256, NULL, NULL, key, iv), 0);
+
+    const uint8_t *plaintext = (const uint8_t *)"";
+    uint8_t enc[CRYPTO_AES_IV_SIZE];
+    size_t enc_len = 0;
+    uint8_t dec[CRYPTO_AES_IV_SIZE];
+    size_t dec_len = 0;
+    assert_int_equal(crypto_encrypt_aescbc(key, CRYPTO_AES_KEY_BITS_256, iv,
+                                          plaintext, 0, enc, &enc_len), 0);
+    assert_int_equal(enc_len, CRYPTO_AES_IV_SIZE);
+    assert_int_equal(crypto_decrypt_aescbc(key, CRYPTO_AES_KEY_BITS_256, iv,
+                                          enc, enc_len, dec, &dec_len), 0);
+    assert_int_equal(dec_len, 0);
 }
 
 static void test_rsa_sign_verify(void **state) {
@@ -186,10 +232,22 @@ static void test_crypto_encrypt_invalid(void **state) {
     uint8_t iv[CRYPTO_AES_IV_SIZE] = {0};
     uint8_t in[CRYPTO_AES_IV_SIZE] = {0};
     uint8_t out[CRYPTO_AES_IV_SIZE];
-    assert_int_equal(crypto_encrypt_aescbc(NULL, CRYPTO_AES_KEY_BITS_128, iv, in, CRYPTO_AES_IV_SIZE, out), -1);
-    assert_int_equal(crypto_encrypt_aescbc(key, CRYPTO_AES_KEY_BITS_128, NULL, in, CRYPTO_AES_IV_SIZE, out), -1);
-    assert_int_equal(crypto_encrypt_aescbc(key, CRYPTO_AES_KEY_BITS_128, iv, NULL, CRYPTO_AES_IV_SIZE, out), -1);
-    assert_int_equal(crypto_encrypt_aescbc(key, CRYPTO_AES_KEY_BITS_128, iv, in, CRYPTO_AES_IV_SIZE, NULL), -1);
+    size_t out_len = 0;
+    assert_int_equal(crypto_encrypt_aescbc(NULL, CRYPTO_AES_KEY_BITS_128, iv,
+                                           in, CRYPTO_AES_IV_SIZE, out,
+                                           &out_len), -1);
+    assert_int_equal(crypto_encrypt_aescbc(key, CRYPTO_AES_KEY_BITS_128, NULL,
+                                           in, CRYPTO_AES_IV_SIZE, out,
+                                           &out_len), -1);
+    assert_int_equal(crypto_encrypt_aescbc(key, CRYPTO_AES_KEY_BITS_128, iv,
+                                           NULL, CRYPTO_AES_IV_SIZE, out,
+                                           &out_len), -1);
+    assert_int_equal(crypto_encrypt_aescbc(key, CRYPTO_AES_KEY_BITS_128, iv,
+                                           in, CRYPTO_AES_IV_SIZE, NULL,
+                                           &out_len), -1);
+    assert_int_equal(crypto_encrypt_aescbc(key, CRYPTO_AES_KEY_BITS_128, iv,
+                                           in, CRYPTO_AES_IV_SIZE, out,
+                                           NULL), -1);
 }
 
 static void test_crypto_sign_invalid(void **state) {
@@ -214,7 +272,9 @@ static void test_crypto_verify_invalid(void **state) {
 
 const struct CMUnitTest crypto_tests[] = {
     cmocka_unit_test(test_sha384),
+    cmocka_unit_test(test_aes_cbc_empty),
     cmocka_unit_test(test_aes_cbc),
+    cmocka_unit_test(test_aes_cbc_unaligned),
     cmocka_unit_test(test_rsa_sign_verify),
     cmocka_unit_test(test_lms_sign_verify),
     cmocka_unit_test(test_mldsa_sign_verify),

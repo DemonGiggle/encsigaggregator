@@ -404,43 +404,79 @@ static int aes_setkey(mbedtls_aes_context *aes, const uint8_t *key, size_t bits,
 
 int crypto_encrypt_aescbc(const uint8_t *key, size_t bits,
                           const uint8_t iv[CRYPTO_AES_IV_SIZE],
-                          const uint8_t *in, size_t len, uint8_t *out) {
-    if (!key || !iv || !in || !out)
+                          const uint8_t *in, size_t len, uint8_t *out,
+                          size_t *out_len) {
+    if (!key || !iv || !in || !out || !out_len)
         return -1;
+    size_t pad = CRYPTO_AES_IV_SIZE - (len % CRYPTO_AES_IV_SIZE);
+    if (pad == 0)
+        pad = CRYPTO_AES_IV_SIZE;
+    size_t padded_len = len + pad;
+    unsigned char *buf = malloc(padded_len);
+    if (!buf)
+        return -1;
+    memcpy(buf, in, len);
+    memset(buf + len, (unsigned char)pad, pad);
     mbedtls_aes_context aes;
     mbedtls_aes_init(&aes);
     if (aes_setkey(&aes, key, bits, 1) != 0) {
+        free(buf);
         mbedtls_aes_free(&aes);
         return -1;
     }
     unsigned char iv_copy[CRYPTO_AES_IV_SIZE];
     memcpy(iv_copy, iv, CRYPTO_AES_IV_SIZE);
-    if (mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_ENCRYPT, len, iv_copy, in, out) != 0) {
+    if (mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_ENCRYPT, padded_len, iv_copy, buf, out) != 0) {
+        free(buf);
         mbedtls_aes_free(&aes);
         return -1;
     }
     mbedtls_aes_free(&aes);
+    free(buf);
+    *out_len = padded_len;
     return 0;
 }
 
 int crypto_decrypt_aescbc(const uint8_t *key, size_t bits,
                           const uint8_t iv[CRYPTO_AES_IV_SIZE],
-                          const uint8_t *in, size_t len, uint8_t *out) {
-    if (!key || !iv || !in || !out)
+                          const uint8_t *in, size_t len, uint8_t *out,
+                          size_t *out_len) {
+    if (!key || !iv || !in || !out || !out_len ||
+        len == 0 || (len % CRYPTO_AES_IV_SIZE) != 0)
+        return -1;
+    unsigned char *buf = malloc(len);
+    if (!buf)
         return -1;
     mbedtls_aes_context aes;
     mbedtls_aes_init(&aes);
     if (aes_setkey(&aes, key, bits, 0) != 0) {
+        free(buf);
         mbedtls_aes_free(&aes);
         return -1;
     }
     unsigned char iv_copy[CRYPTO_AES_IV_SIZE];
     memcpy(iv_copy, iv, CRYPTO_AES_IV_SIZE);
-    if (mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_DECRYPT, len, iv_copy, in, out) != 0) {
+    if (mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_DECRYPT, len, iv_copy, in, buf) != 0) {
+        free(buf);
         mbedtls_aes_free(&aes);
         return -1;
     }
     mbedtls_aes_free(&aes);
+    unsigned char pad = buf[len - 1];
+    if (pad == 0 || pad > CRYPTO_AES_IV_SIZE || pad > len) {
+        free(buf);
+        return -1;
+    }
+    for (size_t i = 0; i < pad; ++i) {
+        if (buf[len - 1 - i] != pad) {
+            free(buf);
+            return -1;
+        }
+    }
+    size_t plen = len - pad;
+    memcpy(out, buf, plen);
+    free(buf);
+    *out_len = plen;
     return 0;
 }
 

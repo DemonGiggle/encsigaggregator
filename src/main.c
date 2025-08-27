@@ -7,45 +7,95 @@
 #include "util.h"
 
 
-/* write result to the output file, optionally including generated keys */
-static int write_output(const char *path, int include_keys, const crypto_key *priv,
-                        const crypto_key *pub, size_t aes_bits,
-                        const uint8_t aes_key[CRYPTO_AES_MAX_KEY_SIZE],
-                        const uint8_t iv[CRYPTO_AES_IV_SIZE],
-                        const uint8_t *sig, size_t sig_len,
-                        const uint8_t *enc, size_t enc_len)
+/* write binary and hex representations to files */
+static int write_bin_hex_pair(const char *bin_path, const char *hex_path,
+                              const uint8_t *data, size_t len)
 {
-    FILE *f = fopen(path, "wb");
-    if (!f) {
+    FILE *f = fopen(bin_path, "wb");
+    if (!f)
+        return -1;
+    if (fwrite(data, 1, len, f) != len) {
+        fclose(f);
         return -1;
     }
+    fclose(f);
+
+    f = fopen(hex_path, "w");
+    if (!f)
+        return -1;
+    for (size_t i = 0; i < len; i++) {
+        fprintf(f, "%02x", data[i]);
+        if (i + 1 < len)
+            fputc(',', f);
+    }
+    fputc('\n', f);
+    fclose(f);
+    return 0;
+}
+
+static int write_component(const char *base, const char *name,
+                           const uint8_t *data, size_t len)
+{
+    size_t base_len = strlen(base);
+    size_t name_len = strlen(name);
+    char *bin_path = malloc(base_len + 1 + name_len + 4 + 1);
+    char *hex_path = malloc(base_len + 1 + name_len + 4 + 1);
+    if (!bin_path || !hex_path) {
+        free(bin_path);
+        free(hex_path);
+        return -1;
+    }
+    sprintf(bin_path, "%s_%s.bin", base, name);
+    sprintf(hex_path, "%s_%s.hex", base, name);
+    int ret = write_bin_hex_pair(bin_path, hex_path, data, len);
+    if (ret == 0) {
+        printf("%s binary: %s\n", name, bin_path);
+        printf("%s hex: %s\n", name, hex_path);
+    }
+    free(bin_path);
+    free(hex_path);
+    return ret;
+}
+
+static int write_outputs(const char *out_path, int include_keys,
+                         const crypto_key *priv, const crypto_key *pub,
+                         size_t aes_bits,
+                         const uint8_t aes_key[CRYPTO_AES_MAX_KEY_SIZE],
+                         const uint8_t iv[CRYPTO_AES_IV_SIZE],
+                         const uint8_t *sig, size_t sig_len,
+                         const uint8_t *enc, size_t enc_len)
+{
+    size_t out_len = strlen(out_path);
+    char *hex_path = malloc(out_len + 4 + 1);
+    if (!hex_path)
+        return -1;
+    sprintf(hex_path, "%s.hex", out_path);
+    if (write_bin_hex_pair(out_path, hex_path, enc, enc_len) != 0) {
+        free(hex_path);
+        return -1;
+    }
+    printf("ciphertext binary: %s\n", out_path);
+    printf("ciphertext hex: %s\n", hex_path);
+    free(hex_path);
 
     if (include_keys) {
         uint32_t v = (uint32_t)aes_bits;
-        fwrite(&v, sizeof(v), 1, f);
-        fwrite(iv, 1, CRYPTO_AES_IV_SIZE, f);
-        fwrite(aes_key, 1, aes_bits / 8, f);
-
-        v = (uint32_t)priv->key_len;
-        fwrite(&v, sizeof(v), 1, f);
-        fwrite(priv->key, 1, priv->key_len, f);
-
-        v = (uint32_t)pub->key_len;
-        fwrite(&v, sizeof(v), 1, f);
-        fwrite(pub->key, 1, pub->key_len, f);
-
-        v = (uint32_t)sig_len;
-        fwrite(&v, sizeof(v), 1, f);
-        fwrite(sig, 1, sig_len, f);
-
-        v = (uint32_t)enc_len;
-        fwrite(&v, sizeof(v), 1, f);
-        fwrite(enc, 1, enc_len, f);
-    } else {
-        fwrite(enc, 1, enc_len, f);
+        if (write_component(out_path, "aes_bits", (uint8_t *)&v,
+                            sizeof(v)) != 0)
+            return -1;
+        if (write_component(out_path, "aes_iv", iv,
+                            CRYPTO_AES_IV_SIZE) != 0)
+            return -1;
+        if (write_component(out_path, "aes_key", aes_key,
+                            aes_bits / 8) != 0)
+            return -1;
+        if (write_component(out_path, "priv", priv->key, priv->key_len) != 0)
+            return -1;
+        if (write_component(out_path, "pub", pub->key, pub->key_len) != 0)
+            return -1;
+        if (write_component(out_path, "sig", sig, sig_len) != 0)
+            return -1;
     }
-
-    fclose(f);
     return 0;
 }
 
@@ -132,8 +182,8 @@ int main(int argc, char **argv)
     }
 
     /* Write everything to the requested output */
-    if (write_output(opts.outfile, generate, &priv, &pub, opts.aes_bits,
-                     aes_key, iv, sig, sig_len, enc, enc_len) != 0) {
+    if (write_outputs(opts.outfile, generate, &priv, &pub, opts.aes_bits,
+                      aes_key, iv, sig, sig_len, enc, enc_len) != 0) {
         fprintf(stderr, "Write failed\n");
         free(buf);
         free(sig);

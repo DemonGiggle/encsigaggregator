@@ -4,6 +4,7 @@
 #include <cmocka.h>
 #include <string.h>
 
+/* Ensure parser rejects an unsupported algorithm argument. */
 void test_cli_invalid_alg(void **state) {
     (void)state;
     char *argv[] = {"prog", "-a", "foo", "-i", "in", "-o", "out", NULL};
@@ -11,6 +12,7 @@ void test_cli_invalid_alg(void **state) {
     assert_int_equal(cli_parse_args(7, argv, &opts), -1);
 }
 
+/* Ensure parser rejects an unsupported AES key size. */
 void test_cli_invalid_bits(void **state) {
     (void)state;
     char *argv[] = {"prog", "-b", "42", "-i", "in", "-o", "out", NULL};
@@ -18,6 +20,7 @@ void test_cli_invalid_bits(void **state) {
     assert_int_equal(cli_parse_args(7, argv, &opts), -1);
 }
 
+/* Verify failure when required input file argument is missing. */
 void test_cli_missing_infile(void **state) {
     (void)state;
     char *argv[] = {"prog", "-o", "out", NULL};
@@ -25,6 +28,7 @@ void test_cli_missing_infile(void **state) {
     assert_int_equal(cli_parse_args(3, argv, &opts), -1);
 }
 
+/* Verify failure when required output file argument is missing. */
 void test_cli_missing_outfile(void **state) {
     (void)state;
     char *argv[] = {"prog", "-i", "in", NULL};
@@ -32,6 +36,7 @@ void test_cli_missing_outfile(void **state) {
     assert_int_equal(cli_parse_args(3, argv, &opts), -1);
 }
 
+/* Parse minimal valid invocation and verify default options. */
 void test_cli_valid_minimal(void **state) {
     (void)state;
     char *argv[] = {"prog", "-i", "in", "-o", "out", NULL};
@@ -43,6 +48,7 @@ void test_cli_valid_minimal(void **state) {
     assert_string_equal(opts.outfile, "out");
 }
 
+/* Accept RSA+LMS algorithm selection. */
 void test_cli_rsa_lms(void **state) {
     (void)state;
     char *argv[] = {"prog", "-a", "rsa-lms", "-i", "in", "-o", "out", NULL};
@@ -51,6 +57,7 @@ void test_cli_rsa_lms(void **state) {
     assert_int_equal(opts.alg, CRYPTO_ALG_RSA4096_LMS);
 }
 
+/* Accept RSA+ML-DSA algorithm selection. */
 void test_cli_rsa_mldsa(void **state) {
     (void)state;
     char *argv[] = {"prog", "-a", "rsa-mldsa87", "-i", "in", "-o", "out", NULL};
@@ -59,6 +66,7 @@ void test_cli_rsa_mldsa(void **state) {
     assert_int_equal(opts.alg, CRYPTO_ALG_RSA4096_MLDSA87);
 }
 
+/* Accept LMS+ML-DSA algorithm selection. */
 void test_cli_lms_mldsa(void **state) {
     (void)state;
     char *argv[] = {"prog", "-a", "lms-mldsa87", "-i", "in", "-o", "out", NULL};

@@ -24,7 +24,7 @@ static int write_bin_hex_pair(const char *bin_path, const char *hex_path,
     if (!f)
         return -1;
     for (size_t i = 0; i < len; i++) {
-        fprintf(f, "%02x", data[i]);
+        fprintf(f, "0x%02x", data[i]);
         if (i + 1 < len)
             fputc(',', f);
     }

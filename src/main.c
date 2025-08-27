@@ -59,8 +59,8 @@ static int write_component(const char *base, const char *name,
 
 static int write_outputs(const char *out_path, int include_keys,
                          const crypto_key *priv, const crypto_key *pub,
-                         size_t aes_bits,
                          const uint8_t aes_key[CRYPTO_AES_MAX_KEY_SIZE],
+                         size_t aes_key_len,
                          const uint8_t iv[CRYPTO_AES_IV_SIZE],
                          const uint8_t *sig, size_t sig_len,
                          const uint8_t *enc, size_t enc_len)
@@ -79,15 +79,11 @@ static int write_outputs(const char *out_path, int include_keys,
     free(hex_path);
 
     if (include_keys) {
-        uint32_t v = (uint32_t)aes_bits;
-        if (write_component(out_path, "aes_bits", (uint8_t *)&v,
-                            sizeof(v)) != 0)
-            return -1;
         if (write_component(out_path, "aes_iv", iv,
                             CRYPTO_AES_IV_SIZE) != 0)
             return -1;
         if (write_component(out_path, "aes_key", aes_key,
-                            aes_bits / 8) != 0)
+                            aes_key_len) != 0)
             return -1;
         if (write_component(out_path, "priv", priv->key, priv->key_len) != 0)
             return -1;
@@ -182,8 +178,9 @@ int main(int argc, char **argv)
     }
 
     /* Write everything to the requested output */
-    if (write_outputs(opts.outfile, generate, &priv, &pub, opts.aes_bits,
-                      aes_key, iv, sig, sig_len, enc, enc_len) != 0) {
+    if (write_outputs(opts.outfile, generate, &priv, &pub,
+                      aes_key, opts.aes_bits / 8,
+                      iv, sig, sig_len, enc, enc_len) != 0) {
         fprintf(stderr, "Write failed\n");
         free(buf);
         free(sig);

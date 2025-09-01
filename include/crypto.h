@@ -70,6 +70,10 @@ int crypto_decrypt_aescbc(const uint8_t *key, size_t bits,
 int crypto_sha384(const uint8_t *in, size_t len,
                   uint8_t out[CRYPTO_SHA384_DIGEST_SIZE]);
 
+int crypto_export_keypair(crypto_alg alg, const crypto_key *priv,
+                          const crypto_key *pub, crypto_key *out_priv,
+                          crypto_key *out_pub);
+
 void crypto_free_key(crypto_key *key);
 
 #ifdef __cplusplus

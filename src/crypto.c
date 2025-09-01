@@ -563,6 +563,177 @@ int crypto_sha384(const uint8_t *in, size_t len,
                       in, len, out);
 }
 
+static int export_simple(crypto_alg alg, const crypto_key *priv,
+                         const crypto_key *pub, crypto_key *out_priv,
+                         crypto_key *out_pub)
+{
+    if (!priv || !pub || !out_priv || !out_pub) {
+        return -1;
+    }
+    if (alg == CRYPTO_ALG_RSA4096) {
+        mbedtls_pk_context *pk = priv->key;
+        unsigned char buf[5000];
+        int len = mbedtls_pk_write_key_der(pk, buf, sizeof(buf));
+        if (len <= 0) {
+            return -1;
+        }
+        out_priv->key = malloc(len);
+        if (!out_priv->key) {
+            return -1;
+        }
+        memcpy(out_priv->key, buf + sizeof(buf) - len, len);
+        out_priv->key_len = len;
+        out_priv->alg     = alg;
+
+        len = mbedtls_pk_write_pubkey_der(pk, buf, sizeof(buf));
+        if (len <= 0) {
+            free(out_priv->key);
+            return -1;
+        }
+        out_pub->key = malloc(len);
+        if (!out_pub->key) {
+            free(out_priv->key);
+            return -1;
+        }
+        memcpy(out_pub->key, buf + sizeof(buf) - len, len);
+        out_pub->key_len = len;
+        out_pub->alg     = alg;
+        return 0;
+    } else if (alg == CRYPTO_ALG_LMS) {
+        const lms_pair *pair = priv->key;
+        const mbedtls_lms_private_t *pr = &pair->priv;
+        size_t count = 1u << MBEDTLS_LMS_H_TREE_HEIGHT(
+            pr->MBEDTLS_PRIVATE(params).MBEDTLS_PRIVATE(type));
+        size_t priv_size =
+            sizeof(pr->MBEDTLS_PRIVATE(params)) +
+            sizeof(pr->MBEDTLS_PRIVATE(q_next_usable_key)) +
+            count * sizeof(mbedtls_lmots_private_t) +
+            count * sizeof(mbedtls_lmots_public_t) +
+            sizeof(pr->MBEDTLS_PRIVATE(have_private_key));
+        unsigned char *pbuf = malloc(priv_size);
+        if (!pbuf) {
+            return -1;
+        }
+        unsigned char *p = pbuf;
+        memcpy(p, &pr->MBEDTLS_PRIVATE(params),
+               sizeof(pr->MBEDTLS_PRIVATE(params)));
+        p += sizeof(pr->MBEDTLS_PRIVATE(params));
+        memcpy(p, &pr->MBEDTLS_PRIVATE(q_next_usable_key),
+               sizeof(pr->MBEDTLS_PRIVATE(q_next_usable_key)));
+        p += sizeof(pr->MBEDTLS_PRIVATE(q_next_usable_key));
+        memcpy(p, pr->MBEDTLS_PRIVATE(ots_private_keys),
+               count * sizeof(mbedtls_lmots_private_t));
+        p += count * sizeof(mbedtls_lmots_private_t);
+        memcpy(p, pr->MBEDTLS_PRIVATE(ots_public_keys),
+               count * sizeof(mbedtls_lmots_public_t));
+        p += count * sizeof(mbedtls_lmots_public_t);
+        memcpy(p, &pr->MBEDTLS_PRIVATE(have_private_key),
+               sizeof(pr->MBEDTLS_PRIVATE(have_private_key)));
+        out_priv->key     = pbuf;
+        out_priv->key_len = priv_size;
+        out_priv->alg     = alg;
+
+        size_t pub_len = MBEDTLS_LMS_PUBLIC_KEY_LEN(
+            pr->MBEDTLS_PRIVATE(params).MBEDTLS_PRIVATE(type));
+        unsigned char *pub_buf = malloc(pub_len);
+        if (!pub_buf) {
+            free(pbuf);
+            return -1;
+        }
+        size_t olen = 0;
+        if (mbedtls_lms_export_public_key(&pair->pub, pub_buf, pub_len,
+                                          &olen) != 0 || olen != pub_len) {
+            free(pbuf);
+            free(pub_buf);
+            return -1;
+        }
+        out_pub->key     = pub_buf;
+        out_pub->key_len = pub_len;
+        out_pub->alg     = alg;
+        return 0;
+    } else if (alg == CRYPTO_ALG_MLDSA87) {
+        out_priv->key = malloc(priv->key_len);
+        out_pub->key  = malloc(pub->key_len);
+        if (!out_priv->key || !out_pub->key) {
+            free(out_priv->key);
+            free(out_pub->key);
+            return -1;
+        }
+        memcpy(out_priv->key, priv->key, priv->key_len);
+        memcpy(out_pub->key, pub->key, pub->key_len);
+        out_priv->key_len = priv->key_len;
+        out_pub->key_len  = pub->key_len;
+        out_priv->alg     = alg;
+        out_pub->alg      = alg;
+        return 0;
+    }
+    return -1;
+}
+
+int crypto_export_keypair(crypto_alg alg, const crypto_key *priv,
+                          const crypto_key *pub, crypto_key *out_priv,
+                          crypto_key *out_pub)
+{
+    if (!priv || !pub || !out_priv || !out_pub) {
+        return -1;
+    }
+    if (alg == CRYPTO_ALG_RSA4096_LMS ||
+        alg == CRYPTO_ALG_RSA4096_MLDSA87 ||
+        alg == CRYPTO_ALG_LMS_MLDSA87) {
+        const hybrid_pair *pair = priv->key;
+        crypto_key first_priv = {0}, first_pub = {0};
+        crypto_key second_priv = {0}, second_pub = {0};
+        crypto_alg first, second;
+        if (alg == CRYPTO_ALG_RSA4096_LMS) {
+            first  = CRYPTO_ALG_RSA4096;
+            second = CRYPTO_ALG_LMS;
+        } else if (alg == CRYPTO_ALG_RSA4096_MLDSA87) {
+            first  = CRYPTO_ALG_RSA4096;
+            second = CRYPTO_ALG_MLDSA87;
+        } else {
+            first  = CRYPTO_ALG_LMS;
+            second = CRYPTO_ALG_MLDSA87;
+        }
+        if (export_simple(first, &pair->first_priv, &pair->first_pub,
+                          &first_priv, &first_pub) != 0 ||
+            export_simple(second, &pair->second_priv, &pair->second_pub,
+                          &second_priv, &second_pub) != 0) {
+            free(first_priv.key);
+            free(first_pub.key);
+            free(second_priv.key);
+            free(second_pub.key);
+            return -1;
+        }
+        out_priv->key_len = first_priv.key_len + second_priv.key_len;
+        out_pub->key_len  = first_pub.key_len + second_pub.key_len;
+        out_priv->key = malloc(out_priv->key_len);
+        out_pub->key  = malloc(out_pub->key_len);
+        if (!out_priv->key || !out_pub->key) {
+            free(out_priv->key);
+            free(out_pub->key);
+            free(first_priv.key);
+            free(first_pub.key);
+            free(second_priv.key);
+            free(second_pub.key);
+            return -1;
+        }
+        memcpy(out_priv->key, first_priv.key, first_priv.key_len);
+        memcpy((unsigned char *)out_priv->key + first_priv.key_len,
+               second_priv.key, second_priv.key_len);
+        memcpy(out_pub->key, first_pub.key, first_pub.key_len);
+        memcpy((unsigned char *)out_pub->key + first_pub.key_len,
+               second_pub.key, second_pub.key_len);
+        out_priv->alg = alg;
+        out_pub->alg  = alg;
+        free(first_priv.key);
+        free(first_pub.key);
+        free(second_priv.key);
+        free(second_pub.key);
+        return 0;
+    }
+    return export_simple(alg, priv, pub, out_priv, out_pub);
+}
+
 void crypto_free_key(crypto_key *key)
 {
     if (!key || !key->key) {

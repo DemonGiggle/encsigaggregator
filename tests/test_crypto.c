@@ -1,10 +1,16 @@
+#define _POSIX_C_SOURCE 200809L
 #include "crypto.h"
+#include "util.h"
 #include <stdarg.h>
 #include <setjmp.h>
 #include <cmocka.h>
 #include <string.h>
+#include <stdlib.h>
 
 #include <mbedtls/lms.h>
+#include <mbedtls/pk.h>
+#include <stdio.h>
+#include <unistd.h>
 #include "api.h"
 
 /* Compute SHA-384 of 'abc' and compare against known vector. */
@@ -85,6 +91,54 @@ static void test_aes_cbc_empty(void **state) {
     assert_int_equal(crypto_decrypt_aescbc(key, CRYPTO_AES_KEY_BITS_256, iv,
                                           enc, enc_len, dec, &dec_len), 0);
     assert_int_equal(dec_len, 0);
+}
+
+static void aes_roundtrip(size_t bits) {
+    char key_path[] = "/tmp/keyXXXXXX";
+    char iv_path[]  = "/tmp/ivXXXXXX";
+    int kfd = mkstemp(key_path);
+    assert_true(kfd != -1);
+    close(kfd);
+    int ifd = mkstemp(iv_path);
+    assert_true(ifd != -1);
+    close(ifd);
+
+    uint8_t key[CRYPTO_AES_MAX_KEY_SIZE];
+    uint8_t iv[CRYPTO_AES_IV_SIZE];
+    assert_int_equal(crypto_init_aes(bits, NULL, NULL, key, iv), 0);
+
+    FILE *f = fopen(key_path, "wb");
+    assert_non_null(f);
+    assert_int_equal(fwrite(key, 1, bits / 8, f), bits / 8);
+    fclose(f);
+    f = fopen(iv_path, "wb");
+    assert_non_null(f);
+    assert_int_equal(fwrite(iv, 1, CRYPTO_AES_IV_SIZE, f), CRYPTO_AES_IV_SIZE);
+    fclose(f);
+
+    uint8_t key2[CRYPTO_AES_MAX_KEY_SIZE];
+    uint8_t iv2[CRYPTO_AES_IV_SIZE];
+    assert_int_equal(crypto_init_aes(bits, key_path, iv_path, key2, iv2), 0);
+    assert_memory_equal(key, key2, bits / 8);
+    assert_memory_equal(iv, iv2, CRYPTO_AES_IV_SIZE);
+
+    unlink(key_path);
+    unlink(iv_path);
+}
+
+static void test_aes_serialize_128(void **state) {
+    (void)state;
+    aes_roundtrip(CRYPTO_AES_KEY_BITS_128);
+}
+
+static void test_aes_serialize_192(void **state) {
+    (void)state;
+    aes_roundtrip(CRYPTO_AES_KEY_BITS_192);
+}
+
+static void test_aes_serialize_256(void **state) {
+    (void)state;
+    aes_roundtrip(CRYPTO_AES_KEY_BITS_256);
 }
 
 /* Generate RSA key pair and verify signing round-trip. */
@@ -220,6 +274,123 @@ static void test_lms_mldsa_sign_verify(void **state) {
     crypto_free_key(&pub);
 }
 
+static void outputs_roundtrip(crypto_alg alg) {
+    crypto_key priv = {0}, pub = {0};
+    assert_int_equal(crypto_keygen(alg, &priv, &pub), 0);
+
+    uint8_t aes_key[CRYPTO_AES_MAX_KEY_SIZE];
+    uint8_t iv[CRYPTO_AES_IV_SIZE];
+    assert_int_equal(crypto_init_aes(CRYPTO_AES_KEY_BITS_128, NULL, NULL,
+                                     aes_key, iv), 0);
+
+    const uint8_t msg[] = "serialize test";
+    size_t sig_len = CRYPTO_MAX_SIG_SIZE;
+    uint8_t *sig = malloc(sig_len);
+    assert_non_null(sig);
+    assert_int_equal(crypto_sign(alg, &priv, msg, sizeof(msg) - 1,
+                                 sig, &sig_len), 0);
+
+    size_t enc_len = sizeof(msg) - 1;
+    size_t rem = enc_len % CRYPTO_AES_IV_SIZE;
+    enc_len += CRYPTO_AES_IV_SIZE - rem;
+    uint8_t *enc = malloc(enc_len);
+    assert_non_null(enc);
+    assert_int_equal(crypto_encrypt_aescbc(aes_key, CRYPTO_AES_KEY_BITS_128,
+                                          iv, msg, sizeof(msg) - 1,
+                                          enc, &enc_len), 0);
+
+    char out_path[] = "/tmp/outXXXXXX";
+    int fd = mkstemp(out_path);
+    assert_true(fd != -1);
+    close(fd);
+
+    crypto_key priv_ser = {0}, pub_ser = {0};
+    assert_int_equal(crypto_export_keypair(alg, &priv, &pub,
+                                           &priv_ser, &pub_ser), 0);
+
+    assert_int_equal(write_outputs(out_path, 1, &priv_ser, &pub_ser,
+                                   aes_key, CRYPTO_AES_KEY_BITS_128 / 8,
+                                   iv, sig, sig_len, enc, enc_len), 0);
+
+    uint8_t *tmp = NULL;
+    size_t len = 0;
+    assert_int_equal(read_file(out_path, &tmp, &len), 0);
+    assert_int_equal(len, enc_len);
+    assert_memory_equal(tmp, enc, enc_len);
+    free(tmp);
+
+    char *path = malloc(strlen(out_path) + 32);
+    assert_non_null(path);
+
+    const struct { const char *name; const uint8_t *data; size_t len; } comps[] = {
+        {"aes_iv", iv, CRYPTO_AES_IV_SIZE},
+        {"aes_key", aes_key, CRYPTO_AES_KEY_BITS_128 / 8},
+        {"priv", priv_ser.key, priv_ser.key_len},
+        {"pub", pub_ser.key, pub_ser.key_len},
+        {"sig", sig, sig_len},
+    };
+    for (size_t i = 0; i < sizeof(comps)/sizeof(comps[0]); i++) {
+        sprintf(path, "%s_%s.bin", out_path, comps[i].name);
+        tmp = NULL;
+        len = 0;
+        assert_int_equal(read_file(path, &tmp, &len), 0);
+        assert_int_equal(len, comps[i].len);
+        assert_memory_equal(tmp, comps[i].data, comps[i].len);
+        free(tmp);
+        unlink(path);
+        sprintf(path, "%s_%s.hex", out_path, comps[i].name);
+        unlink(path);
+    }
+    free(path);
+
+    char *hex_path = malloc(strlen(out_path) + 5);
+    assert_non_null(hex_path);
+    sprintf(hex_path, "%s.hex", out_path);
+    unlink(out_path);
+    unlink(hex_path);
+    free(hex_path);
+
+    free(sig);
+    free(enc);
+    free(priv_ser.key);
+    free(pub_ser.key);
+    void *shared = (priv.key == pub.key) ? priv.key : NULL;
+    crypto_free_key(&priv);
+    if (shared)
+        pub.key = NULL;
+    crypto_free_key(&pub);
+}
+
+static void test_rsa_outputs(void **state) {
+    (void)state;
+    outputs_roundtrip(CRYPTO_ALG_RSA4096);
+}
+
+static void test_lms_outputs(void **state) {
+    (void)state;
+    outputs_roundtrip(CRYPTO_ALG_LMS);
+}
+
+static void test_mldsa_outputs(void **state) {
+    (void)state;
+    outputs_roundtrip(CRYPTO_ALG_MLDSA87);
+}
+
+static void test_rsa_lms_outputs(void **state) {
+    (void)state;
+    outputs_roundtrip(CRYPTO_ALG_RSA4096_LMS);
+}
+
+static void test_rsa_mldsa_outputs(void **state) {
+    (void)state;
+    outputs_roundtrip(CRYPTO_ALG_RSA4096_MLDSA87);
+}
+
+static void test_lms_mldsa_outputs(void **state) {
+    (void)state;
+    outputs_roundtrip(CRYPTO_ALG_LMS_MLDSA87);
+}
+
 /* Reject invalid parameters to AES initialisation routine. */
 static void test_crypto_init_aes_invalid(void **state) {
     (void)state;
@@ -290,12 +461,21 @@ const struct CMUnitTest crypto_tests[] = {
     cmocka_unit_test(test_aes_cbc_empty),
     cmocka_unit_test(test_aes_cbc),
     cmocka_unit_test(test_aes_cbc_unaligned),
+    cmocka_unit_test(test_aes_serialize_128),
+    cmocka_unit_test(test_aes_serialize_192),
+    cmocka_unit_test(test_aes_serialize_256),
     cmocka_unit_test(test_rsa_sign_verify),
     cmocka_unit_test(test_lms_sign_verify),
     cmocka_unit_test(test_mldsa_sign_verify),
     cmocka_unit_test(test_rsa_lms_sign_verify),
     cmocka_unit_test(test_rsa_mldsa_sign_verify),
     cmocka_unit_test(test_lms_mldsa_sign_verify),
+    cmocka_unit_test(test_rsa_outputs),
+    cmocka_unit_test(test_lms_outputs),
+    cmocka_unit_test(test_mldsa_outputs),
+    cmocka_unit_test(test_rsa_lms_outputs),
+    cmocka_unit_test(test_rsa_mldsa_outputs),
+    cmocka_unit_test(test_lms_mldsa_outputs),
     cmocka_unit_test(test_crypto_init_aes_invalid),
     cmocka_unit_test(test_crypto_sha384_invalid),
     cmocka_unit_test(test_crypto_encrypt_invalid),

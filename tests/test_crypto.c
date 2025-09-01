@@ -343,21 +343,7 @@ static void outputs_roundtrip(crypto_alg alg) {
     assert_memory_equal(tmp, enc, enc_len);
     free(tmp);
 
-    char *path = malloc(strlen(out_path) + 32);
-    assert_non_null(path);
-
-    const char *slash = strrchr(out_path, '/');
-    char *dir = NULL;
-    if (slash) {
-        size_t dir_len = slash - out_path + 1;
-        dir = malloc(dir_len + 1);
-        assert_non_null(dir);
-        memcpy(dir, out_path, dir_len);
-        dir[dir_len] = '\0';
-    } else {
-        dir = strdup("./");
-        assert_non_null(dir);
-    }
+    char path[64];
     const struct { const char *name; const uint8_t *data; size_t len; } comps[] = {
         {"aes_iv", iv, CRYPTO_AES_IV_SIZE},
         {"aes", aes_key, CRYPTO_AES_KEY_BITS_128 / 8},
@@ -366,7 +352,7 @@ static void outputs_roundtrip(crypto_alg alg) {
         {"sig", sig, sig_len},
     };
     for (size_t i = 0; i < sizeof(comps)/sizeof(comps[0]); i++) {
-        sprintf(path, "%s%s.bin", dir, comps[i].name);
+        sprintf(path, "%s.bin", comps[i].name);
         tmp = NULL;
         len = 0;
         assert_int_equal(read_file(path, &tmp, &len), 0);
@@ -374,11 +360,9 @@ static void outputs_roundtrip(crypto_alg alg) {
         assert_memory_equal(tmp, comps[i].data, comps[i].len);
         free(tmp);
         unlink(path);
-        sprintf(path, "%s%s.hex", dir, comps[i].name);
+        sprintf(path, "%s.hex", comps[i].name);
         unlink(path);
     }
-    free(dir);
-    free(path);
 
     char *hex_path = malloc(strlen(out_path) + 5);
     assert_non_null(hex_path);

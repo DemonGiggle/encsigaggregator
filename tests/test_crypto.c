@@ -93,52 +93,76 @@ static void test_aes_cbc_empty(void **state) {
     assert_int_equal(dec_len, 0);
 }
 
-static void aes_roundtrip(size_t bits) {
-    char key_path[] = "/tmp/keyXXXXXX";
-    char iv_path[]  = "/tmp/ivXXXXXX";
-    int kfd = mkstemp(key_path);
-    assert_true(kfd != -1);
-    close(kfd);
-    int ifd = mkstemp(iv_path);
-    assert_true(ifd != -1);
-    close(ifd);
+#include <stdio.h>
+#include <unistd.h>
 
+struct aes_paths {
+    char key_path[sizeof("/tmp/keyXXXXXX")];
+    char iv_path[sizeof("/tmp/ivXXXXXX")];
+};
+
+static int aes_setup(void **state) {
+    struct aes_paths *p = malloc(sizeof(*p));
+    if (!p)
+        return -1;
+    strcpy(p->key_path, "/tmp/keyXXXXXX");
+    int kfd = mkstemp(p->key_path);
+    if (kfd == -1) {
+        free(p);
+        return -1;
+    }
+    close(kfd);
+    strcpy(p->iv_path, "/tmp/ivXXXXXX");
+    int ifd = mkstemp(p->iv_path);
+    if (ifd == -1) {
+        unlink(p->key_path);
+        free(p);
+        return -1;
+    }
+    close(ifd);
+    *state = p;
+    return 0;
+}
+
+static int aes_teardown(void **state) {
+    struct aes_paths *p = *state;
+    unlink(p->key_path);
+    unlink(p->iv_path);
+    free(p);
+    return 0;
+}
+
+static void aes_roundtrip(size_t bits, const struct aes_paths *p) {
     uint8_t key[CRYPTO_AES_MAX_KEY_SIZE];
     uint8_t iv[CRYPTO_AES_IV_SIZE];
     assert_int_equal(crypto_init_aes(bits, NULL, NULL, key, iv), 0);
 
-    FILE *f = fopen(key_path, "wb");
+    FILE *f = fopen(p->key_path, "wb");
     assert_non_null(f);
     assert_int_equal(fwrite(key, 1, bits / 8, f), bits / 8);
     fclose(f);
-    f = fopen(iv_path, "wb");
+    f = fopen(p->iv_path, "wb");
     assert_non_null(f);
     assert_int_equal(fwrite(iv, 1, CRYPTO_AES_IV_SIZE, f), CRYPTO_AES_IV_SIZE);
     fclose(f);
 
     uint8_t key2[CRYPTO_AES_MAX_KEY_SIZE];
     uint8_t iv2[CRYPTO_AES_IV_SIZE];
-    assert_int_equal(crypto_init_aes(bits, key_path, iv_path, key2, iv2), 0);
+    assert_int_equal(crypto_init_aes(bits, p->key_path, p->iv_path, key2, iv2), 0);
     assert_memory_equal(key, key2, bits / 8);
     assert_memory_equal(iv, iv2, CRYPTO_AES_IV_SIZE);
-
-    unlink(key_path);
-    unlink(iv_path);
 }
 
 static void test_aes_serialize_128(void **state) {
-    (void)state;
-    aes_roundtrip(CRYPTO_AES_KEY_BITS_128);
+    aes_roundtrip(CRYPTO_AES_KEY_BITS_128, (const struct aes_paths *)*state);
 }
 
 static void test_aes_serialize_192(void **state) {
-    (void)state;
-    aes_roundtrip(CRYPTO_AES_KEY_BITS_192);
+    aes_roundtrip(CRYPTO_AES_KEY_BITS_192, (const struct aes_paths *)*state);
 }
 
 static void test_aes_serialize_256(void **state) {
-    (void)state;
-    aes_roundtrip(CRYPTO_AES_KEY_BITS_256);
+    aes_roundtrip(CRYPTO_AES_KEY_BITS_256, (const struct aes_paths *)*state);
 }
 
 /* Generate RSA key pair and verify signing round-trip. */
@@ -461,9 +485,9 @@ const struct CMUnitTest crypto_tests[] = {
     cmocka_unit_test(test_aes_cbc_empty),
     cmocka_unit_test(test_aes_cbc),
     cmocka_unit_test(test_aes_cbc_unaligned),
-    cmocka_unit_test(test_aes_serialize_128),
-    cmocka_unit_test(test_aes_serialize_192),
-    cmocka_unit_test(test_aes_serialize_256),
+    cmocka_unit_test_setup_teardown(test_aes_serialize_128, aes_setup, aes_teardown),
+    cmocka_unit_test_setup_teardown(test_aes_serialize_192, aes_setup, aes_teardown),
+    cmocka_unit_test_setup_teardown(test_aes_serialize_256, aes_setup, aes_teardown),
     cmocka_unit_test(test_rsa_sign_verify),
     cmocka_unit_test(test_lms_sign_verify),
     cmocka_unit_test(test_mldsa_sign_verify),

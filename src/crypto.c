@@ -29,6 +29,8 @@ typedef struct {
 #define LMS_SIG_LEN \
     MBEDTLS_LMS_SIG_LEN(MBEDTLS_LMS_SHA256_M32_H10, MBEDTLS_LMOTS_SHA256_N32_W8)
 
+#define CRYPTO_RSA_DER_MAX_LEN 4096
+
 
 static int rng_callback(void *ctx, unsigned char *out, size_t len) {
     return mbedtls_ctr_drbg_random((mbedtls_ctr_drbg_context *)ctx, out, len);
@@ -572,7 +574,7 @@ static int export_simple(crypto_alg alg, const crypto_key *priv,
     }
     if (alg == CRYPTO_ALG_RSA4096) {
         mbedtls_pk_context *pk = priv->key;
-        unsigned char buf[5000];
+        unsigned char buf[CRYPTO_RSA_DER_MAX_LEN];
         int len = mbedtls_pk_write_key_der(pk, buf, sizeof(buf));
         if (len <= 0) {
             return -1;
@@ -694,28 +696,19 @@ int crypto_export_keypair(crypto_alg alg, const crypto_key *priv,
             first  = CRYPTO_ALG_LMS;
             second = CRYPTO_ALG_MLDSA87;
         }
+        int ret = -1;
         if (export_simple(first, &pair->first_priv, &pair->first_pub,
                           &first_priv, &first_pub) != 0 ||
             export_simple(second, &pair->second_priv, &pair->second_pub,
                           &second_priv, &second_pub) != 0) {
-            free(first_priv.key);
-            free(first_pub.key);
-            free(second_priv.key);
-            free(second_pub.key);
-            return -1;
+            goto cleanup;
         }
         out_priv->key_len = first_priv.key_len + second_priv.key_len;
         out_pub->key_len  = first_pub.key_len + second_pub.key_len;
         out_priv->key = malloc(out_priv->key_len);
         out_pub->key  = malloc(out_pub->key_len);
         if (!out_priv->key || !out_pub->key) {
-            free(out_priv->key);
-            free(out_pub->key);
-            free(first_priv.key);
-            free(first_pub.key);
-            free(second_priv.key);
-            free(second_pub.key);
-            return -1;
+            goto cleanup;
         }
         memcpy(out_priv->key, first_priv.key, first_priv.key_len);
         memcpy((unsigned char *)out_priv->key + first_priv.key_len,
@@ -725,11 +718,19 @@ int crypto_export_keypair(crypto_alg alg, const crypto_key *priv,
                second_pub.key, second_pub.key_len);
         out_priv->alg = alg;
         out_pub->alg  = alg;
+        ret = 0;
+    cleanup:
+        if (ret != 0) {
+            free(out_priv->key);
+            free(out_pub->key);
+            out_priv->key = NULL;
+            out_pub->key = NULL;
+        }
         free(first_priv.key);
         free(first_pub.key);
         free(second_priv.key);
         free(second_pub.key);
-        return 0;
+        return ret;
     }
     return export_simple(alg, priv, pub, out_priv, out_pub);
 }

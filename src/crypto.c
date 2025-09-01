@@ -617,6 +617,10 @@ static int export_simple(crypto_alg alg, const crypto_key *priv,
             return -1;
         }
         unsigned char *p = pbuf;
+        /* mbed TLS exposes no official serialization API for
+         * mbedtls_lms_private_t. We copy internal fields accessed via
+         * MBEDTLS_PRIVATE to flatten the structure, which is inherently
+         * fragile and may break with future library changes. */
         memcpy(p, &pr->MBEDTLS_PRIVATE(params),
                sizeof(pr->MBEDTLS_PRIVATE(params)));
         p += sizeof(pr->MBEDTLS_PRIVATE(params));

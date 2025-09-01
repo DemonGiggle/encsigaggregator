@@ -24,23 +24,24 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    int ret = 1;
+    uint8_t *buf = NULL;
+    uint8_t *sig = NULL;
+    uint8_t *enc = NULL;
+    crypto_key priv = {0}, pub = {0};
+    crypto_key priv_ser = {0}, pub_ser = {0};
+
     /* Load the input file */
-    uint8_t *buf  = NULL;
-    size_t   fsize = 0;
+    size_t fsize = 0;
     if (read_file(opts.infile, &buf, &fsize) != 0) {
         perror("input");
-        return 1;
+        goto cleanup;
     }
 
     /* Load or generate the signing key pair */
-    crypto_key priv = {0};
-    crypto_key pub  = {0};
-
-    int ret = crypto_load_keypair(opts.alg, opts.sk_path, opts.pk_path, &priv, &pub);
-    if (ret != 0) {
+    if (crypto_load_keypair(opts.alg, opts.sk_path, opts.pk_path, &priv, &pub) != 0) {
         fprintf(stderr, "Key init failed\n");
-        free(buf);
-        return 1;
+        goto cleanup;
     }
 
     /* Load or generate AES key and IV */
@@ -49,59 +50,40 @@ int main(int argc, char **argv)
     if (crypto_init_aes(opts.aes_bits, opts.aes_key_path, opts.aes_iv_path,
                         aes_key, iv) != 0) {
         fprintf(stderr, "AES init failed\n");
-        free(buf);
-        crypto_free_key(&priv);
-        return 1;
+        goto cleanup;
     }
 
     /* Sign the input */
-    size_t   sig_len = CRYPTO_MAX_SIG_SIZE; /* large enough */
-    uint8_t *sig     = malloc(sig_len);
+    size_t sig_len = CRYPTO_MAX_SIG_SIZE; /* large enough */
+    sig = malloc(sig_len);
     if (!sig) {
-        free(buf);
-        crypto_free_key(&priv);
-        return 1;
+        goto cleanup;
     }
     if (crypto_sign(opts.alg, &priv, buf, fsize, sig, &sig_len) != 0) {
         fprintf(stderr, "Signing failed\n");
-        free(buf);
-        free(sig);
-        crypto_free_key(&priv);
-        return 1;
+        goto cleanup;
     }
 
     /* Encrypt the input */
-    size_t   remainder = fsize % CRYPTO_AES_IV_SIZE;
-    size_t   enc_len   = fsize + (CRYPTO_AES_IV_SIZE - remainder);
-    uint8_t *enc       = malloc(enc_len);
+    size_t remainder = fsize % CRYPTO_AES_IV_SIZE;
+    size_t enc_len = fsize + (CRYPTO_AES_IV_SIZE - remainder);
+    enc = malloc(enc_len);
     if (!enc) {
-        free(buf);
-        free(sig);
-        crypto_free_key(&priv);
-        return 1;
+        goto cleanup;
     }
     if (crypto_encrypt_aescbc(aes_key, opts.aes_bits, iv, buf, fsize, enc,
                               &enc_len) != 0) {
         fprintf(stderr, "Encryption failed\n");
-        free(buf);
-        free(sig);
-        free(enc);
-        crypto_free_key(&priv);
-        return 1;
+        goto cleanup;
     }
 
     const crypto_key *priv_out = &priv;
     const crypto_key *pub_out  = &pub;
-    crypto_key priv_ser = {0}, pub_ser = {0};
     if (generate) {
         if (crypto_export_keypair(opts.alg, &priv, &pub,
                                   &priv_ser, &pub_ser) != 0) {
             fprintf(stderr, "Key export failed\n");
-            free(buf);
-            free(sig);
-            free(enc);
-            crypto_free_key(&priv);
-            return 1;
+            goto cleanup;
         }
         priv_out = &priv_ser;
         pub_out  = &pub_ser;
@@ -112,17 +94,12 @@ int main(int argc, char **argv)
                       aes_key, opts.aes_bits / 8,
                       iv, sig, sig_len, enc, enc_len) != 0) {
         fprintf(stderr, "Write failed\n");
-        free(buf);
-        free(sig);
-        free(enc);
-        if (generate) {
-            free(priv_ser.key);
-            free(pub_ser.key);
-        }
-        crypto_free_key(&priv);
-        return 1;
+        goto cleanup;
     }
 
+    ret = 0;
+
+cleanup:
     free(buf);
     free(sig);
     free(enc);
@@ -131,6 +108,6 @@ int main(int argc, char **argv)
         free(pub_ser.key);
     }
     crypto_free_key(&priv); /* pub shares context */
-    return 0;
+    return ret;
 }
 

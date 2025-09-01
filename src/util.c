@@ -56,20 +56,21 @@ static int write_bin_hex_pair(const char *bin_path, const char *hex_path,
     return 0;
 }
 
-static int write_component(const char *base, const char *name,
+static int write_component(const char *dir, const char *name,
                            const uint8_t *data, size_t len)
 {
-    size_t base_len = strlen(base);
+    size_t dir_len = strlen(dir);
     size_t name_len = strlen(name);
-    char *bin_path = malloc(base_len + 1 + name_len + 4 + 1);
-    char *hex_path = malloc(base_len + 1 + name_len + 4 + 1);
+    /* dir already includes trailing '/' if needed */
+    char *bin_path = malloc(dir_len + name_len + 4 + 1);
+    char *hex_path = malloc(dir_len + name_len + 4 + 1);
     if (!bin_path || !hex_path) {
         free(bin_path);
         free(hex_path);
         return -1;
     }
-    sprintf(bin_path, "%s_%s.bin", base, name);
-    sprintf(hex_path, "%s_%s.hex", base, name);
+    sprintf(bin_path, "%s%s.bin", dir, name);
+    sprintf(hex_path, "%s%s.hex", dir, name);
     int ret = write_bin_hex_pair(bin_path, hex_path, data, len);
     if (ret == 0) {
         printf("%s binary: %s\n", name, bin_path);
@@ -102,17 +103,34 @@ int write_outputs(const char *out_path, int include_keys,
     free(hex_path);
 
     if (include_keys) {
-        if (write_component(out_path, "aes_iv", iv,
-                            CRYPTO_AES_IV_SIZE) != 0)
-            return -1;
-        if (write_component(out_path, "aes_key", aes_key,
-                            aes_key_len) != 0)
-            return -1;
-        if (write_component(out_path, "priv", priv->key, priv->key_len) != 0)
-            return -1;
-        if (write_component(out_path, "pub", pub->key, pub->key_len) != 0)
-            return -1;
-        if (write_component(out_path, "sig", sig, sig_len) != 0)
+        const char *slash = strrchr(out_path, '/');
+        char *dir = NULL;
+        if (slash) {
+            size_t dir_len = slash - out_path + 1; /* include '/' */
+            dir = malloc(dir_len + 1);
+            if (!dir)
+                return -1;
+            memcpy(dir, out_path, dir_len);
+            dir[dir_len] = '\0';
+        } else {
+            dir = malloc(3);
+            if (!dir)
+                return -1;
+            strcpy(dir, "./");
+        }
+        int ret = 0;
+        if (write_component(dir, "aes_iv", iv, CRYPTO_AES_IV_SIZE) != 0)
+            ret = -1;
+        else if (write_component(dir, "aes", aes_key, aes_key_len) != 0)
+            ret = -1;
+        else if (write_component(dir, "sk", priv->key, priv->key_len) != 0)
+            ret = -1;
+        else if (write_component(dir, "pk", pub->key, pub->key_len) != 0)
+            ret = -1;
+        else if (write_component(dir, "sig", sig, sig_len) != 0)
+            ret = -1;
+        free(dir);
+        if (ret != 0)
             return -1;
     }
     return 0;

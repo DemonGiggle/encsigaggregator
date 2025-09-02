@@ -4,16 +4,48 @@ Coding Guidelines and Build Steps
 - Use C99 for all C source files.
 - Keep main.c concise by delegating cryptographic loading/generation logic to
   crypto.c helper functions.
-- Before building the project, make sure the prerequisites are installed and the
-  dependencies are fetched and built:
-  1. Install build tools and Python support:
-     `sudo apt-get update && sudo apt-get install -y build-essential cmake git \
-     python3 python3-pip`.
-  2. Install the Python packages `jsonschema` and `jinja2` required by Mbed TLS
-     (e.g. `pip3 install jsonschema jinja2`).
-  3. Run `scripts/install_third_party.sh` to clone Mbed TLS and PQClean and
-     build their libraries. Mbed TLS is compiled with
-     `include/mbedtls_custom_config.h` to enable LMS support.
-- Install the cmocka development package (e.g. `sudo apt-get install libcmocka-dev`) to compile the unit tests.
-- The top level `make` depends on the libraries above to compile `libcrypto.a`
-  and the example tool `encsigtool`.
+
+Build & Test Workflow
+---------------------
+
+Follow these steps to build the library and run the unit tests:
+
+1. **Install system packages** (compiler, CMake, git, CMocka, Python):
+
+   ```sh
+   sudo apt-get update
+   sudo apt-get install -y build-essential cmake git python3 python3-pip libcmocka-dev
+   ```
+
+2. **Install Python packages** required by Mbed TLS:
+
+   ```sh
+   pip3 install jsonschema jinja2
+   ```
+
+3. **Fetch and build third-party libraries** (Mbed TLS and PQClean):
+
+   ```sh
+   scripts/install_third_party.sh
+   ```
+
+   This script clones the correct versions and builds the libraries using
+   `include/mbedtls_custom_config.h` to enable LMS support.
+
+4. **Build the project**:
+
+   ```sh
+   make
+   ```
+
+   This produces `libcrypto.a` and the example tool `encsigtool`.
+
+5. **Run the unit tests**:
+
+   ```sh
+   make test
+   ```
+
+   Re-run `make test` after any code changes to ensure everything builds and all
+   tests pass.
+

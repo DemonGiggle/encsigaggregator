@@ -74,6 +74,11 @@ int crypto_export_keypair(crypto_alg alg, const crypto_key *priv,
                           const crypto_key *pub, crypto_key *out_priv,
                           crypto_key *out_pub);
 
+int crypto_export_keypair_components(crypto_alg alg, const crypto_key *priv,
+                                     const crypto_key *pub,
+                                     crypto_key out_priv[2],
+                                     crypto_key out_pub[2]);
+
 void crypto_free_key(crypto_key *key);
 
 #ifdef __cplusplus

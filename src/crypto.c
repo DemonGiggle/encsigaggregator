@@ -676,6 +676,53 @@ static int export_simple(crypto_alg alg, const crypto_key *priv,
     return -1;
 }
 
+int crypto_export_keypair_components(crypto_alg alg, const crypto_key *priv,
+                                     const crypto_key *pub,
+                                     crypto_key out_priv[2],
+                                     crypto_key out_pub[2])
+{
+    if (!priv || !pub || !out_priv || !out_pub) {
+        return -1;
+    }
+    memset(out_priv, 0, sizeof(crypto_key) * 2);
+    memset(out_pub, 0, sizeof(crypto_key) * 2);
+    if (alg == CRYPTO_ALG_RSA4096 ||
+        alg == CRYPTO_ALG_LMS ||
+        alg == CRYPTO_ALG_MLDSA87) {
+        return export_simple(alg, priv, pub, &out_priv[0], &out_pub[0]);
+    }
+    if (alg == CRYPTO_ALG_RSA4096_LMS ||
+        alg == CRYPTO_ALG_RSA4096_MLDSA87 ||
+        alg == CRYPTO_ALG_LMS_MLDSA87) {
+        const hybrid_pair *pair = priv->key;
+        crypto_alg first, second;
+        if (alg == CRYPTO_ALG_RSA4096_LMS) {
+            first = CRYPTO_ALG_RSA4096;
+            second = CRYPTO_ALG_LMS;
+        } else if (alg == CRYPTO_ALG_RSA4096_MLDSA87) {
+            first = CRYPTO_ALG_RSA4096;
+            second = CRYPTO_ALG_MLDSA87;
+        } else {
+            first = CRYPTO_ALG_LMS;
+            second = CRYPTO_ALG_MLDSA87;
+        }
+        if (export_simple(first, &pair->first_priv, &pair->first_pub,
+                          &out_priv[0], &out_pub[0]) != 0 ||
+            export_simple(second, &pair->second_priv, &pair->second_pub,
+                          &out_priv[1], &out_pub[1]) != 0) {
+            free(out_priv[0].key);
+            free(out_pub[0].key);
+            free(out_priv[1].key);
+            free(out_pub[1].key);
+            memset(out_priv, 0, sizeof(crypto_key) * 2);
+            memset(out_pub, 0, sizeof(crypto_key) * 2);
+            return -1;
+        }
+        return 0;
+    }
+    return -1;
+}
+
 int crypto_export_keypair(crypto_alg alg, const crypto_key *priv,
                           const crypto_key *pub, crypto_key *out_priv,
                           crypto_key *out_pub)

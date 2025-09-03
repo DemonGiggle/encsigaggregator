@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <mbedtls/lms.h>
+#include "api.h"
 
 int read_file(const char *path, uint8_t **buf, size_t *len)
 {
@@ -106,12 +108,61 @@ int write_outputs(const char *out_path, int include_keys,
             ret = -1;
         else if (write_component("aes", aes_key, aes_key_len) != 0)
             ret = -1;
-        else if (write_component("sk", priv->key, priv->key_len) != 0)
-            ret = -1;
-        else if (write_component("pk", pub->key, pub->key_len) != 0)
-            ret = -1;
-        else if (write_component("sig", sig, sig_len) != 0)
-            ret = -1;
+        else if (priv->alg == CRYPTO_ALG_RSA4096_LMS ||
+                 priv->alg == CRYPTO_ALG_RSA4096_MLDSA87 ||
+                 priv->alg == CRYPTO_ALG_LMS_MLDSA87) {
+            crypto_key privs[2] = {{0}};
+            crypto_key pubs[2] = {{0}};
+            size_t len1 = 0, len2 = 0;
+            if (crypto_export_keypair_components(priv->alg, priv, pub,
+                                                 privs, pubs) != 0)
+                ret = -1;
+            else if (priv->alg == CRYPTO_ALG_RSA4096_LMS) {
+                len1 = CRYPTO_RSA_SIG_SIZE;
+                len2 = MBEDTLS_LMS_SIG_LEN(MBEDTLS_LMS_SHA256_M32_H10,
+                                           MBEDTLS_LMOTS_SHA256_N32_W8);
+            } else if (priv->alg == CRYPTO_ALG_RSA4096_MLDSA87) {
+                len1 = CRYPTO_RSA_SIG_SIZE;
+                len2 = PQCLEAN_MLDSA87_CLEAN_CRYPTO_BYTES;
+            } else {
+                len1 = MBEDTLS_LMS_SIG_LEN(MBEDTLS_LMS_SHA256_M32_H10,
+                                           MBEDTLS_LMOTS_SHA256_N32_W8);
+                len2 = PQCLEAN_MLDSA87_CLEAN_CRYPTO_BYTES;
+            }
+            if (ret == 0 && sig_len == len1 + len2) {
+                if (write_component("sk0", privs[0].key, privs[0].key_len) != 0)
+                    ret = -1;
+                else if (write_component("sk1", privs[1].key, privs[1].key_len) != 0)
+                    ret = -1;
+                else if (write_component("pk0", pubs[0].key, pubs[0].key_len) != 0)
+                    ret = -1;
+                else if (write_component("pk1", pubs[1].key, pubs[1].key_len) != 0)
+                    ret = -1;
+                else if (write_component("sig0", sig, len1) != 0)
+                    ret = -1;
+                else if (write_component("sig1", sig + len1, len2) != 0)
+                    ret = -1;
+            } else {
+                ret = -1;
+            }
+            free(privs[0].key);
+            free(privs[1].key);
+            free(pubs[0].key);
+            free(pubs[1].key);
+        } else {
+            crypto_key priv_ser = {0}, pub_ser = {0};
+            if (crypto_export_keypair(priv->alg, priv, pub,
+                                      &priv_ser, &pub_ser) != 0)
+                ret = -1;
+            else if (write_component("sk", priv_ser.key, priv_ser.key_len) != 0)
+                ret = -1;
+            else if (write_component("pk", pub_ser.key, pub_ser.key_len) != 0)
+                ret = -1;
+            else if (write_component("sig", sig, sig_len) != 0)
+                ret = -1;
+            free(priv_ser.key);
+            free(pub_ser.key);
+        }
         if (ret != 0)
             return -1;
     }

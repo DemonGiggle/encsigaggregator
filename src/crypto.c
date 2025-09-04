@@ -676,21 +676,16 @@ static int export_simple(crypto_alg alg, const crypto_key *priv,
     return -1;
 }
 
-int crypto_export_keypair_components(crypto_alg alg, const crypto_key *priv,
-                                     const crypto_key *pub,
-                                     crypto_key out_priv[2],
-                                     crypto_key out_pub[2])
+int crypto_hybrid_export_keypairs(crypto_alg alg, const crypto_key *priv,
+                                  const crypto_key *pub,
+                                  crypto_key out_priv[2],
+                                  crypto_key out_pub[2])
 {
     if (!priv || !pub || !out_priv || !out_pub) {
         return -1;
     }
     memset(out_priv, 0, sizeof(crypto_key) * 2);
     memset(out_pub, 0, sizeof(crypto_key) * 2);
-    if (alg == CRYPTO_ALG_RSA4096 ||
-        alg == CRYPTO_ALG_LMS ||
-        alg == CRYPTO_ALG_MLDSA87) {
-        return export_simple(alg, priv, pub, &out_priv[0], &out_pub[0]);
-    }
     if (alg == CRYPTO_ALG_RSA4096_LMS ||
         alg == CRYPTO_ALG_RSA4096_MLDSA87 ||
         alg == CRYPTO_ALG_LMS_MLDSA87) {

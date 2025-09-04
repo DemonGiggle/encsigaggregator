@@ -346,8 +346,8 @@ static void outputs_roundtrip(crypto_alg alg) {
     if (alg == CRYPTO_ALG_RSA4096_LMS ||
         alg == CRYPTO_ALG_RSA4096_MLDSA87 ||
         alg == CRYPTO_ALG_LMS_MLDSA87) {
-        assert_int_equal(crypto_export_keypair_components(alg, &priv, &pub,
-                                                          priv_ser, pub_ser), 0);
+        assert_int_equal(crypto_hybrid_export_keypairs(alg, &priv, &pub,
+                                                      priv_ser, pub_ser), 0);
         key_count = 2;
     } else {
         assert_int_equal(crypto_export_keypair(alg, &priv, &pub,
@@ -364,19 +364,19 @@ static void outputs_roundtrip(crypto_alg alg) {
     comps[comp_idx].data = aes_key;
     comps[comp_idx].len  = CRYPTO_AES_KEY_BITS_128 / 8;
     comp_idx++;
+    for (size_t i = 0; i < key_count; i++) {
+        sprintf(comps[comp_idx].name, "sk%zu", i);
+        comps[comp_idx].data = priv_ser[i].key;
+        comps[comp_idx].len  = priv_ser[i].key_len;
+        comp_idx++;
+    }
+    for (size_t i = 0; i < key_count; i++) {
+        sprintf(comps[comp_idx].name, "pk%zu", i);
+        comps[comp_idx].data = pub_ser[i].key;
+        comps[comp_idx].len  = pub_ser[i].key_len;
+        comp_idx++;
+    }
     if (key_count == 2) {
-        for (size_t i = 0; i < key_count; i++) {
-            sprintf(comps[comp_idx].name, "sk%zu", i);
-            comps[comp_idx].data = priv_ser[i].key;
-            comps[comp_idx].len  = priv_ser[i].key_len;
-            comp_idx++;
-        }
-        for (size_t i = 0; i < key_count; i++) {
-            sprintf(comps[comp_idx].name, "pk%zu", i);
-            comps[comp_idx].data = pub_ser[i].key;
-            comps[comp_idx].len  = pub_ser[i].key_len;
-            comp_idx++;
-        }
         size_t len1 = 0, len2 = 0;
         if (alg == CRYPTO_ALG_RSA4096_LMS) {
             len1 = CRYPTO_RSA_SIG_SIZE;
@@ -399,15 +399,7 @@ static void outputs_roundtrip(crypto_alg alg) {
         comps[comp_idx].len  = len2;
         comp_idx++;
     } else {
-        strcpy(comps[comp_idx].name, "sk");
-        comps[comp_idx].data = priv_ser[0].key;
-        comps[comp_idx].len  = priv_ser[0].key_len;
-        comp_idx++;
-        strcpy(comps[comp_idx].name, "pk");
-        comps[comp_idx].data = pub_ser[0].key;
-        comps[comp_idx].len  = pub_ser[0].key_len;
-        comp_idx++;
-        strcpy(comps[comp_idx].name, "sig");
+        strcpy(comps[comp_idx].name, "sig0");
         comps[comp_idx].data = sig;
         comps[comp_idx].len  = sig_len;
         comp_idx++;

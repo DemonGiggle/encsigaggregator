@@ -104,20 +104,20 @@ int write_outputs(const char *out_path, int include_keys,
 
     if (include_keys) {
         int ret = 0;
-        if (write_component("aes_iv", iv, CRYPTO_AES_IV_SIZE) != 0)
+        if (write_component("aes_iv", iv, CRYPTO_AES_IV_SIZE) != 0) {
             ret = -1;
-        else if (write_component("aes", aes_key, aes_key_len) != 0)
+        } else if (write_component("aes", aes_key, aes_key_len) != 0) {
             ret = -1;
-        else if (priv->alg == CRYPTO_ALG_RSA4096_LMS ||
-                 priv->alg == CRYPTO_ALG_RSA4096_MLDSA87 ||
-                 priv->alg == CRYPTO_ALG_LMS_MLDSA87) {
+        } else if (priv->alg == CRYPTO_ALG_RSA4096_LMS ||
+                   priv->alg == CRYPTO_ALG_RSA4096_MLDSA87 ||
+                   priv->alg == CRYPTO_ALG_LMS_MLDSA87) {
             crypto_key privs[2] = {{0}};
             crypto_key pubs[2] = {{0}};
             size_t len1 = 0, len2 = 0;
-            if (crypto_export_keypair_components(priv->alg, priv, pub,
-                                                 privs, pubs) != 0)
+            if (crypto_hybrid_export_keypairs(priv->alg, priv, pub,
+                                              privs, pubs) != 0) {
                 ret = -1;
-            else if (priv->alg == CRYPTO_ALG_RSA4096_LMS) {
+            } else if (priv->alg == CRYPTO_ALG_RSA4096_LMS) {
                 len1 = CRYPTO_RSA_SIG_SIZE;
                 len2 = MBEDTLS_LMS_SIG_LEN(MBEDTLS_LMS_SHA256_M32_H10,
                                            MBEDTLS_LMOTS_SHA256_N32_W8);
@@ -152,14 +152,15 @@ int write_outputs(const char *out_path, int include_keys,
         } else {
             crypto_key priv_ser = {0}, pub_ser = {0};
             if (crypto_export_keypair(priv->alg, priv, pub,
-                                      &priv_ser, &pub_ser) != 0)
+                                      &priv_ser, &pub_ser) != 0) {
                 ret = -1;
-            else if (write_component("sk", priv_ser.key, priv_ser.key_len) != 0)
+            } else if (write_component("sk0", priv_ser.key, priv_ser.key_len) != 0) {
                 ret = -1;
-            else if (write_component("pk", pub_ser.key, pub_ser.key_len) != 0)
+            } else if (write_component("pk0", pub_ser.key, pub_ser.key_len) != 0) {
                 ret = -1;
-            else if (write_component("sig", sig, sig_len) != 0)
+            } else if (write_component("sig0", sig, sig_len) != 0) {
                 ret = -1;
+            }
             free(priv_ser.key);
             free(pub_ser.key);
         }

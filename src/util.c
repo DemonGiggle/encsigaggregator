@@ -105,14 +105,17 @@ int write_outputs(const char *out_path, int include_keys,
 {
     size_t out_len = strlen(out_path);
     char *hex_path = malloc(out_len + 4 + 1);
+
     if (hex_path == NULL) {
         return -1;
     }
+
     sprintf(hex_path, "%s.hex", out_path);
     if (write_bin_hex_pair(out_path, hex_path, enc, enc_len) != 0) {
         free(hex_path);
         return -1;
     }
+
     printf("ciphertext binary: %s\n", out_path);
     printf("ciphertext hex: %s\n", hex_path);
     free(hex_path);

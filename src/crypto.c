@@ -36,14 +36,17 @@ int crypto_init_aes(size_t bits, const char *key_path, const char *iv_path,
 
     mbedtls_entropy_context ent;
     mbedtls_ctr_drbg_context drbg;
+
     mbedtls_entropy_init(&ent);
     mbedtls_ctr_drbg_init(&drbg);
+
     if (mbedtls_ctr_drbg_seed(&drbg, mbedtls_entropy_func, &ent, NULL, 0) != 0) {
         return -1;
     }
 
     uint8_t *tmp = NULL;
     size_t   len = 0;
+
     if (key_path && read_file(key_path, &tmp, &len) == 0 && len == bits / 8) {
         memcpy(key_out, tmp, len);
         free(tmp);
@@ -77,10 +80,13 @@ int crypto_keygen(crypto_alg alg, crypto_key *out_priv, crypto_key *out_pub)
     if (!out_priv || !out_pub) {
         return -1;
     }
+
     mbedtls_entropy_context entropy;
     mbedtls_ctr_drbg_context drbg;
+
     mbedtls_entropy_init(&entropy);
     mbedtls_ctr_drbg_init(&drbg);
+
     if (mbedtls_ctr_drbg_seed(&drbg, mbedtls_entropy_func, &entropy, NULL, 0) != 0) {
         return -1;
     }
@@ -170,10 +176,13 @@ int crypto_sign(crypto_alg alg, const crypto_key *priv, const uint8_t *msg, size
     if (alg != priv->alg) {
         return -1;
     }
+
     mbedtls_entropy_context entropy;
     mbedtls_ctr_drbg_context drbg;
+
     mbedtls_entropy_init(&entropy);
     mbedtls_ctr_drbg_init(&drbg);
+
     if (mbedtls_ctr_drbg_seed(&drbg, mbedtls_entropy_func, &entropy, NULL, 0) != 0) {
         return -1;
     }
@@ -191,6 +200,7 @@ int crypto_sign(crypto_alg alg, const crypto_key *priv, const uint8_t *msg, size
         size_t len2 = 0;
         crypto_alg first;
         crypto_alg second;
+
         if (crypto_hybrid_get_algs(alg, &first, &second) != 0 ||
             crypto_hybrid_get_sig_lens(alg, &len1, &len2) != 0) {
             ret = -1;
@@ -238,6 +248,7 @@ int crypto_verify(crypto_alg alg, const crypto_key *pub, const uint8_t *msg, siz
         size_t len2 = 0;
         crypto_alg first;
         crypto_alg second;
+
         if (crypto_hybrid_get_algs(alg, &first, &second) != 0 ||
             crypto_hybrid_get_sig_lens(alg, &len1, &len2) != 0) {
             return -1;
@@ -278,24 +289,30 @@ int crypto_encrypt_aescbc(const uint8_t *key, size_t bits,
     if (!key || !iv || !in || !out || !out_len) {
         return -1;
     }
+
     size_t pad = CRYPTO_AES_IV_SIZE - (len % CRYPTO_AES_IV_SIZE);
     if (pad == 0) {
         pad = CRYPTO_AES_IV_SIZE;
     }
+
     size_t        padded_len = len + pad;
     unsigned char *buf       = malloc(padded_len);
     if (!buf) {
         return -1;
     }
+
     memcpy(buf, in, len);
     memset(buf + len, (unsigned char)pad, pad);
+
     mbedtls_aes_context aes;
     mbedtls_aes_init(&aes);
+
     if (aes_setkey(&aes, key, bits, 1) != 0) {
         free(buf);
         mbedtls_aes_free(&aes);
         return -1;
     }
+
     unsigned char iv_copy[CRYPTO_AES_IV_SIZE];
     memcpy(iv_copy, iv, CRYPTO_AES_IV_SIZE);
     if (mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_ENCRYPT, padded_len, iv_copy, buf, out) != 0) {
@@ -303,6 +320,7 @@ int crypto_encrypt_aescbc(const uint8_t *key, size_t bits,
         mbedtls_aes_free(&aes);
         return -1;
     }
+
     mbedtls_aes_free(&aes);
     free(buf);
     *out_len = padded_len;
@@ -322,13 +340,16 @@ int crypto_decrypt_aescbc(const uint8_t *key, size_t bits,
     if (!buf) {
         return -1;
     }
+
     mbedtls_aes_context aes;
     mbedtls_aes_init(&aes);
+
     if (aes_setkey(&aes, key, bits, 0) != 0) {
         free(buf);
         mbedtls_aes_free(&aes);
         return -1;
     }
+
     unsigned char iv_copy[CRYPTO_AES_IV_SIZE];
     memcpy(iv_copy, iv, CRYPTO_AES_IV_SIZE);
     if (mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_DECRYPT, len, iv_copy, in, buf) != 0) {
@@ -336,18 +357,21 @@ int crypto_decrypt_aescbc(const uint8_t *key, size_t bits,
         mbedtls_aes_free(&aes);
         return -1;
     }
+
     mbedtls_aes_free(&aes);
     unsigned char pad = buf[len - 1];
     if (pad == 0 || pad > CRYPTO_AES_IV_SIZE || pad > len) {
         free(buf);
         return -1;
     }
+
     for (size_t i = 0; i < pad; ++i) {
         if (buf[len - 1 - i] != pad) {
             free(buf);
             return -1;
         }
     }
+
     size_t plen = len - pad;
     memcpy(out, buf, plen);
     free(buf);
@@ -424,11 +448,14 @@ int crypto_hybrid_export_keypairs(crypto_alg alg, const crypto_key *priv,
     if (!priv || !pub || !out_priv || !out_pub) {
         return -1;
     }
+
     memset(out_priv, 0, sizeof(crypto_key) * 2);
     memset(out_pub, 0, sizeof(crypto_key) * 2);
+
     const hybrid_pair *pair = priv->key;
     crypto_alg first;
     crypto_alg second;
+
     if (crypto_hybrid_get_algs(alg, &first, &second) != 0 ||
         export_simple(first, &pair->first_priv, &pair->first_pub,
                       &out_priv[0], &out_pub[0]) != 0 ||
@@ -479,9 +506,11 @@ int crypto_export_keypair(crypto_alg alg, const crypto_key *priv,
         crypto_key second_priv = {0}, second_pub = {0};
         crypto_alg first;
         crypto_alg second;
+
         if (crypto_hybrid_get_algs(alg, &first, &second) != 0) {
             return -1;
         }
+
         int ret = -1;
         if (export_simple(first, &pair->first_priv, &pair->first_pub,
                           &first_priv, &first_pub) != 0 ||
@@ -489,6 +518,7 @@ int crypto_export_keypair(crypto_alg alg, const crypto_key *priv,
                           &second_priv, &second_pub) != 0) {
             goto cleanup;
         }
+
         out_priv->key_len = first_priv.key_len + second_priv.key_len;
         out_pub->key_len  = first_pub.key_len + second_pub.key_len;
         out_priv->key = malloc(out_priv->key_len);
@@ -496,6 +526,7 @@ int crypto_export_keypair(crypto_alg alg, const crypto_key *priv,
         if (!out_priv->key || !out_pub->key) {
             goto cleanup;
         }
+
         memcpy(out_priv->key, first_priv.key, first_priv.key_len);
         memcpy((unsigned char *)out_priv->key + first_priv.key_len,
                second_priv.key, second_priv.key_len);

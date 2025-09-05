@@ -8,6 +8,7 @@
 #include <stdlib.h>
 
 #include <mbedtls/lms.h>
+#include <mbedtls/private_access.h>
 #include <mbedtls/pk.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -206,6 +207,61 @@ static void test_lms_sign_verify(void **state) {
     assert_int_equal(crypto_verify(CRYPTO_ALG_LMS, &pub,
                                    msg, sizeof(msg) - 1,
                                    sig, sig_len), 0);
+    crypto_free_key(&priv);
+    pub.key = NULL;
+    crypto_free_key(&pub);
+}
+
+/* Ensure LMS q_next_usable_key is preserved across serialization. */
+static void test_lms_q_next_usable_key(void **state) {
+    (void)state;
+    crypto_key priv = {0}, pub = {0};
+    assert_int_equal(crypto_keygen(CRYPTO_ALG_LMS, &priv, &pub), 0);
+
+    /* Access the internal LMS pair to inspect q_next_usable_key. */
+    typedef struct {
+        mbedtls_lms_private_t priv;
+        mbedtls_lms_public_t pub;
+    } lms_pair;
+    lms_pair *pair = priv.key;
+    uint32_t before = pair->priv.MBEDTLS_PRIVATE(q_next_usable_key);
+
+    const uint8_t msg[] = "test message";
+    uint8_t sig[MBEDTLS_LMS_SIG_LEN(MBEDTLS_LMS_SHA256_M32_H10,
+                                    MBEDTLS_LMOTS_SHA256_N32_W8) + 32];
+    size_t sig_len = sizeof(sig);
+    assert_int_equal(crypto_sign(CRYPTO_ALG_LMS, &priv,
+                                 msg, sizeof(msg) - 1,
+                                 sig, &sig_len), 0);
+
+    uint32_t after = pair->priv.MBEDTLS_PRIVATE(q_next_usable_key);
+    assert_int_equal(after, before + 1);
+
+    crypto_key priv_ser = {0}, pub_ser = {0};
+    assert_int_equal(crypto_export_keypair(CRYPTO_ALG_LMS, &priv, &pub,
+                                          &priv_ser, &pub_ser), 0);
+
+    char path[] = "/tmp/lmsprivXXXXXX";
+    int fd = mkstemp(path);
+    assert_true(fd != -1);
+    assert_int_equal(write(fd, priv_ser.key, priv_ser.key_len),
+                     (ssize_t)priv_ser.key_len);
+    close(fd);
+
+    uint8_t *buf = NULL;
+    size_t len = 0;
+    assert_int_equal(read_file(path, &buf, &len), 0);
+    assert_int_equal(len, priv_ser.key_len);
+
+    size_t params_size = sizeof(pair->priv.MBEDTLS_PRIVATE(params));
+    uint32_t q_loaded = 0;
+    memcpy(&q_loaded, buf + params_size, sizeof(q_loaded));
+    assert_int_equal(q_loaded, after);
+
+    free(buf);
+    unlink(path);
+    free(priv_ser.key);
+    free(pub_ser.key);
     crypto_free_key(&priv);
     pub.key = NULL;
     crypto_free_key(&pub);
@@ -554,6 +610,7 @@ const struct CMUnitTest crypto_tests[] = {
     cmocka_unit_test_setup_teardown(test_aes_serialize_256, aes_setup, aes_teardown),
     cmocka_unit_test(test_rsa_sign_verify),
     cmocka_unit_test(test_lms_sign_verify),
+    cmocka_unit_test(test_lms_q_next_usable_key),
     cmocka_unit_test(test_mldsa_sign_verify),
     cmocka_unit_test(test_rsa_lms_sign_verify),
     cmocka_unit_test(test_rsa_mldsa_sign_verify),

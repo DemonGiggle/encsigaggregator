@@ -366,9 +366,7 @@ static void outputs_roundtrip(crypto_alg alg) {
     crypto_key priv_ser[2] = {{0}};
     crypto_key pub_ser[2] = {{0}};
     size_t key_count = 1;
-    if (alg == CRYPTO_ALG_RSA4096_LMS ||
-        alg == CRYPTO_ALG_RSA4096_MLDSA87 ||
-        alg == CRYPTO_ALG_LMS_MLDSA87) {
+    if (crypto_is_hybrid_alg(alg)) {
         assert_int_equal(crypto_hybrid_export_keypairs(alg, &priv, &pub,
                                                       priv_ser, pub_ser), 0);
         key_count = 2;

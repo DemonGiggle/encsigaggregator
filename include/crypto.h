@@ -79,6 +79,8 @@ int crypto_hybrid_export_keypairs(crypto_alg alg, const crypto_key *priv,
                                   crypto_key out_priv[2],
                                   crypto_key out_pub[2]);
 
+int crypto_is_hybrid_alg(crypto_alg alg);
+
 int crypto_hybrid_get_algs(crypto_alg alg, crypto_alg *first,
                            crypto_alg *second);
 

@@ -123,9 +123,7 @@ int write_outputs(const char *out_path, int include_keys,
         crypto_key pubs[2] = {{0}};
         crypto_key priv_ser = {0}, pub_ser = {0};
         size_t sig_lens[2] = {0};
-        int hybrid = (priv->alg == CRYPTO_ALG_RSA4096_LMS ||
-                      priv->alg == CRYPTO_ALG_RSA4096_MLDSA87 ||
-                      priv->alg == CRYPTO_ALG_LMS_MLDSA87);
+        int hybrid = crypto_is_hybrid_alg(priv->alg);
 
         if (write_component("aes_iv", iv, CRYPTO_AES_IV_SIZE) != 0) {
             goto error;

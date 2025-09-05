@@ -3,21 +3,15 @@
 #include <string.h>
 #include <stdio.h>
 #include "util.h"
+#include "lms.h"
+#include "rsa.h"
+#include "mldsa.h"
 
 #include <mbedtls/aes.h>
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/entropy.h>
-#include <mbedtls/pk.h>
-#include <mbedtls/rsa.h>
 #include <mbedtls/md.h>
 #include <mbedtls/lms.h>
-
-#include "api.h" /* PQClean ml-dsa-87 */
-
-typedef struct {
-    mbedtls_lms_private_t priv;
-    mbedtls_lms_public_t pub;
-} lms_pair;
 
 typedef struct {
     crypto_key first_priv;
@@ -29,12 +23,6 @@ typedef struct {
 #define LMS_SIG_LEN \
     MBEDTLS_LMS_SIG_LEN(MBEDTLS_LMS_SHA256_M32_H10, MBEDTLS_LMOTS_SHA256_N32_W8)
 
-#define CRYPTO_RSA_DER_MAX_LEN 4096
-
-
-static int rng_callback(void *ctx, unsigned char *out, size_t len) {
-    return mbedtls_ctr_drbg_random((mbedtls_ctr_drbg_context *)ctx, out, len);
-}
 
 int crypto_init_aes(size_t bits, const char *key_path, const char *iv_path,
                     uint8_t *key_out, uint8_t iv_out[CRYPTO_AES_IV_SIZE])
@@ -97,88 +85,25 @@ int crypto_keygen(crypto_alg alg, crypto_key *out_priv, crypto_key *out_pub)
         return -1;
     }
 
+    int ret = -1;
     if (alg == CRYPTO_ALG_RSA4096) {
-        mbedtls_pk_context *pk = calloc(1, sizeof(*pk));
-        if (!pk) {
-            return -1;
-        }
-        mbedtls_pk_init(pk);
-        if (mbedtls_pk_setup(pk, mbedtls_pk_info_from_type(MBEDTLS_PK_RSA)) != 0) {
-            free(pk);
-            return -1;
-        }
-        if (mbedtls_rsa_gen_key(mbedtls_pk_rsa(*pk), rng_callback, &drbg,
-                                CRYPTO_RSA_BITS, CRYPTO_RSA_EXPONENT) != 0) {
-            mbedtls_pk_free(pk);
-            free(pk);
-            return -1;
-        }
-        out_priv->alg     = CRYPTO_ALG_RSA4096;
-        out_pub->alg      = CRYPTO_ALG_RSA4096;
-        out_priv->key     = pk;
-        out_pub->key      = pk; /* share context */
-        out_priv->key_len = sizeof(*pk);
-        out_pub->key_len  = sizeof(*pk);
-        return 0;
+        ret = rsa_keygen(&drbg, out_priv, out_pub);
     } else if (alg == CRYPTO_ALG_LMS) {
-        lms_pair *pair = calloc(1, sizeof(*pair));
-        if (!pair) {
-            return -1;
-        }
-        mbedtls_lms_private_init(&pair->priv);
-        mbedtls_lms_public_init(&pair->pub);
-        unsigned char seed[CRYPTO_LMS_SEED_SIZE];
-        if (mbedtls_ctr_drbg_random(&drbg, seed, sizeof(seed)) != 0 ||
-            mbedtls_lms_generate_private_key(&pair->priv,
-                                             MBEDTLS_LMS_SHA256_M32_H10,
-                                             MBEDTLS_LMOTS_SHA256_N32_W8,
-                                             rng_callback, &drbg,
-                                             seed, sizeof(seed)) != 0 ||
-            mbedtls_lms_calculate_public_key(&pair->pub, &pair->priv) != 0) {
-            mbedtls_lms_private_free(&pair->priv);
-            mbedtls_lms_public_free(&pair->pub);
-            free(pair);
-            return -1;
-        }
-        out_priv->alg     = CRYPTO_ALG_LMS;
-        out_pub->alg      = CRYPTO_ALG_LMS;
-        out_priv->key     = pair;
-        out_pub->key      = pair; /* same struct contains priv/pub */
-        out_priv->key_len = sizeof(*pair);
-        out_pub->key_len  = sizeof(*pair);
-        return 0;
+        ret = lms_keygen(&drbg, out_priv, out_pub);
     } else if (alg == CRYPTO_ALG_MLDSA87) {
-        unsigned char *pk = NULL;
-        unsigned char *sk = NULL;
-        pk = malloc(PQCLEAN_MLDSA87_CLEAN_CRYPTO_PUBLICKEYBYTES);
-        sk = malloc(PQCLEAN_MLDSA87_CLEAN_CRYPTO_SECRETKEYBYTES);
-        if (!pk || !sk) {
-            free(pk);
-            free(sk);
-            return -1;
-        }
-        if (PQCLEAN_MLDSA87_CLEAN_crypto_sign_keypair(pk, sk) != 0) {
-            free(pk);
-            free(sk);
-            return -1;
-        }
-        out_pub->alg      = CRYPTO_ALG_MLDSA87;
-        out_priv->alg     = CRYPTO_ALG_MLDSA87;
-        out_pub->key      = pk;
-        out_pub->key_len  = PQCLEAN_MLDSA87_CLEAN_CRYPTO_PUBLICKEYBYTES;
-        out_priv->key     = sk;
-        out_priv->key_len = PQCLEAN_MLDSA87_CLEAN_CRYPTO_SECRETKEYBYTES;
-        return 0;
+        ret = mldsa_keygen(out_priv, out_pub);
     } else if (crypto_is_hybrid_alg(alg)) {
         hybrid_pair *pair = calloc(1, sizeof(*pair));
         if (!pair) {
-            return -1;
+            ret = -1;
+            goto cleanup;
         }
         crypto_alg first;
         crypto_alg second;
         if (crypto_hybrid_get_algs(alg, &first, &second) != 0) {
             free(pair);
-            return -1;
+            ret = -1;
+            goto cleanup;
         }
         if (crypto_keygen(first, &pair->first_priv, &pair->first_pub) != 0 ||
             crypto_keygen(second, &pair->second_priv, &pair->second_pub) != 0) {
@@ -189,7 +114,8 @@ int crypto_keygen(crypto_alg alg, crypto_key *out_priv, crypto_key *out_pub)
             pair->second_pub.key = NULL;
             crypto_free_key(&pair->second_pub);
             free(pair);
-            return -1;
+            ret = -1;
+            goto cleanup;
         }
         out_priv->alg     = alg;
         out_pub->alg      = alg;
@@ -197,9 +123,13 @@ int crypto_keygen(crypto_alg alg, crypto_key *out_priv, crypto_key *out_pub)
         out_pub->key      = pair;
         out_priv->key_len = sizeof(*pair);
         out_pub->key_len  = sizeof(*pair);
-        return 0;
+        ret = 0;
     }
-    return -1;
+
+cleanup:
+    mbedtls_ctr_drbg_free(&drbg);
+    mbedtls_entropy_free(&entropy);
+    return ret;
 }
 
 int crypto_load_keypair(crypto_alg alg, const char *priv_path, const char *pub_path,
@@ -216,63 +146,19 @@ int crypto_load_keypair(crypto_alg alg, const char *priv_path, const char *pub_p
         return crypto_keygen(alg, out_priv, out_pub);
     }
 
-    unsigned char *priv_buf = NULL;
-    unsigned char *pub_buf  = NULL;
-
-    size_t priv_len = 0;
-    size_t pub_len  = 0;
-    if (read_file(priv_path, &priv_buf, &priv_len) != 0 ||
-        read_file(pub_path, &pub_buf, &pub_len) != 0) {
-        free(priv_buf);
-        free(pub_buf);
-        return crypto_keygen(alg, out_priv, out_pub);
-    }
-
+    int ret = -1;
     if (alg == CRYPTO_ALG_RSA4096) {
-        mbedtls_pk_context *pk = calloc(1, sizeof(*pk));
-        if (!pk) {
-            free(priv_buf);
-            free(pub_buf);
-            return -1;
-        }
-        mbedtls_pk_init(pk);
-        if (mbedtls_pk_parse_key(pk, priv_buf, priv_len, NULL, 0, NULL, NULL) != 0 ||
-            mbedtls_pk_parse_public_key(pk, pub_buf, pub_len) != 0) {
-            mbedtls_pk_free(pk);
-            free(pk);
-            free(priv_buf);
-            free(pub_buf);
-            return crypto_keygen(alg, out_priv, out_pub);
-        }
-        free(priv_buf);
-        free(pub_buf);
-        out_priv->alg     = CRYPTO_ALG_RSA4096;
-        out_pub->alg      = CRYPTO_ALG_RSA4096;
-        out_priv->key     = pk;
-        out_pub->key      = pk;
-        out_priv->key_len = sizeof(*pk);
-        out_pub->key_len  = sizeof(*pk);
-        return 0;
+        ret = rsa_load_keypair(priv_path, pub_path, out_priv, out_pub);
+    } else if (alg == CRYPTO_ALG_LMS) {
+        ret = lms_load_keypair(priv_path, pub_path, out_priv, out_pub);
     } else if (alg == CRYPTO_ALG_MLDSA87) {
-        if (priv_len != PQCLEAN_MLDSA87_CLEAN_CRYPTO_SECRETKEYBYTES ||
-            pub_len != PQCLEAN_MLDSA87_CLEAN_CRYPTO_PUBLICKEYBYTES) {
-            free(priv_buf);
-            free(pub_buf);
-            return crypto_keygen(alg, out_priv, out_pub);
-        }
-        out_priv->alg     = CRYPTO_ALG_MLDSA87;
-        out_pub->alg      = CRYPTO_ALG_MLDSA87;
-        out_priv->key     = priv_buf;
-        out_priv->key_len = priv_len;
-        out_pub->key      = pub_buf;
-        out_pub->key_len  = pub_len;
-        return 0;
-    } else {
-        /* LMS import of private keys is not supported in Mbed TLS */
-        free(priv_buf);
-        free(pub_buf);
+        ret = mldsa_load_keypair(priv_path, pub_path, out_priv, out_pub);
+    }
+
+    if (ret != 0) {
         return crypto_keygen(alg, out_priv, out_pub);
     }
+    return ret;
 }
 
 int crypto_sign(crypto_alg alg, const crypto_key *priv, const uint8_t *msg, size_t msg_len,
@@ -291,49 +177,14 @@ int crypto_sign(crypto_alg alg, const crypto_key *priv, const uint8_t *msg, size
     if (mbedtls_ctr_drbg_seed(&drbg, mbedtls_entropy_func, &entropy, NULL, 0) != 0) {
         return -1;
     }
+
+    int ret = -1;
     if (alg == CRYPTO_ALG_RSA4096) {
-        mbedtls_pk_context *pk = priv->key;
-        unsigned char hash[CRYPTO_SHA384_DIGEST_SIZE];
-        if (mbedtls_md(mbedtls_md_info_from_type(MBEDTLS_MD_SHA384),
-                       msg, msg_len, hash) != 0) {
-            mbedtls_ctr_drbg_free(&drbg);
-            mbedtls_entropy_free(&entropy);
-            return -1;
-        }
-        size_t sig_size = mbedtls_pk_get_len(pk);
-        if (mbedtls_pk_sign(pk, MBEDTLS_MD_SHA384, hash, sizeof(hash),
-                            sig, sig_size, sig_len, rng_callback, &drbg) != 0) {
-            mbedtls_ctr_drbg_free(&drbg);
-            mbedtls_entropy_free(&entropy);
-            return -1;
-        }
-        mbedtls_ctr_drbg_free(&drbg);
-        mbedtls_entropy_free(&entropy);
-        return 0;
+        ret = rsa_sign(&drbg, priv, msg, msg_len, sig, sig_len);
     } else if (alg == CRYPTO_ALG_LMS) {
-        lms_pair *pair = priv->key;
-        size_t olen = 0;
-        if (mbedtls_lms_sign(&pair->priv, rng_callback, &drbg,
-                              msg, msg_len, sig, *sig_len, &olen) != 0) {
-            mbedtls_ctr_drbg_free(&drbg);
-            mbedtls_entropy_free(&entropy);
-            return -1;
-        }
-        *sig_len = olen;
-        mbedtls_ctr_drbg_free(&drbg);
-        mbedtls_entropy_free(&entropy);
-        return 0;
+        ret = lms_sign(&drbg, priv, msg, msg_len, sig, sig_len);
     } else if (alg == CRYPTO_ALG_MLDSA87) {
-        if (PQCLEAN_MLDSA87_CLEAN_crypto_sign_signature(sig, sig_len,
-                                                         msg, msg_len,
-                                                         priv->key) != 0) {
-            mbedtls_ctr_drbg_free(&drbg);
-            mbedtls_entropy_free(&entropy);
-            return -1;
-        }
-        mbedtls_ctr_drbg_free(&drbg);
-        mbedtls_entropy_free(&entropy);
-        return 0;
+        ret = mldsa_sign(priv, msg, msg_len, sig, sig_len);
     } else if (crypto_is_hybrid_alg(alg)) {
         hybrid_pair *pair = priv->key;
         size_t len1 = 0;
@@ -342,30 +193,28 @@ int crypto_sign(crypto_alg alg, const crypto_key *priv, const uint8_t *msg, size
         crypto_alg second;
         if (crypto_hybrid_get_algs(alg, &first, &second) != 0 ||
             crypto_hybrid_get_sig_lens(alg, &len1, &len2) != 0) {
-            mbedtls_ctr_drbg_free(&drbg);
-            mbedtls_entropy_free(&entropy);
-            return -1;
+            ret = -1;
+        } else {
+            size_t tmp = len1;
+            if (crypto_sign(first, &pair->first_priv, msg, msg_len, sig, &tmp) != 0 ||
+                tmp != len1) {
+                ret = -1;
+            } else {
+                tmp = len2;
+                if (crypto_sign(second, &pair->second_priv, msg, msg_len, sig + len1, &tmp) != 0 ||
+                    tmp != len2) {
+                    ret = -1;
+                } else {
+                    *sig_len = len1 + len2;
+                    ret = 0;
+                }
+            }
         }
-        size_t tmp = len1;
-        if (crypto_sign(first, &pair->first_priv, msg, msg_len, sig, &tmp) != 0 ||
-            tmp != len1) {
-            mbedtls_ctr_drbg_free(&drbg);
-            mbedtls_entropy_free(&entropy);
-            return -1;
-        }
-        tmp = len2;
-        if (crypto_sign(second, &pair->second_priv, msg, msg_len, sig + len1, &tmp) != 0 ||
-            tmp != len2) {
-            mbedtls_ctr_drbg_free(&drbg);
-            mbedtls_entropy_free(&entropy);
-            return -1;
-        }
-        *sig_len = len1 + len2;
-        mbedtls_ctr_drbg_free(&drbg);
-        mbedtls_entropy_free(&entropy);
-        return 0;
     }
-    return -1;
+
+    mbedtls_ctr_drbg_free(&drbg);
+    mbedtls_entropy_free(&entropy);
+    return ret;
 }
 
 int crypto_verify(crypto_alg alg, const crypto_key *pub, const uint8_t *msg, size_t msg_len,
@@ -377,28 +226,12 @@ int crypto_verify(crypto_alg alg, const crypto_key *pub, const uint8_t *msg, siz
     if (alg != pub->alg) {
         return -1;
     }
-    unsigned char hash[CRYPTO_SHA384_DIGEST_SIZE];
     if (alg == CRYPTO_ALG_RSA4096) {
-        mbedtls_pk_context *pk = pub->key;
-        if (mbedtls_md(mbedtls_md_info_from_type(MBEDTLS_MD_SHA384),
-                       msg, msg_len, hash) != 0 ||
-            mbedtls_pk_verify(pk, MBEDTLS_MD_SHA384, hash, sizeof(hash), sig, sig_len) != 0) {
-            return -1;
-        }
-        return 0;
+        return rsa_verify(pub, msg, msg_len, sig, sig_len);
     } else if (alg == CRYPTO_ALG_LMS) {
-        lms_pair *pair = pub->key;
-        if (mbedtls_lms_verify(&pair->pub, msg, msg_len, sig, sig_len) != 0) {
-            return -1;
-        }
-        return 0;
+        return lms_verify(pub, msg, msg_len, sig, sig_len);
     } else if (alg == CRYPTO_ALG_MLDSA87) {
-        if (PQCLEAN_MLDSA87_CLEAN_crypto_sign_verify(sig, sig_len,
-                                                     msg, msg_len,
-                                                     pub->key) != 0) {
-            return -1;
-        }
-        return 0;
+        return mldsa_verify(pub, msg, msg_len, sig, sig_len);
     } else if (crypto_is_hybrid_alg(alg)) {
         hybrid_pair *pair = pub->key;
         size_t len1 = 0;
@@ -540,105 +373,11 @@ static int export_simple(crypto_alg alg, const crypto_key *priv,
         return -1;
     }
     if (alg == CRYPTO_ALG_RSA4096) {
-        mbedtls_pk_context *pk = priv->key;
-        unsigned char buf[CRYPTO_RSA_DER_MAX_LEN];
-        int len = mbedtls_pk_write_key_der(pk, buf, sizeof(buf));
-        if (len <= 0) {
-            return -1;
-        }
-        out_priv->key = malloc(len);
-        if (!out_priv->key) {
-            return -1;
-        }
-        memcpy(out_priv->key, buf + sizeof(buf) - len, len);
-        out_priv->key_len = len;
-        out_priv->alg     = alg;
-
-        len = mbedtls_pk_write_pubkey_der(pk, buf, sizeof(buf));
-        if (len <= 0) {
-            free(out_priv->key);
-            return -1;
-        }
-        out_pub->key = malloc(len);
-        if (!out_pub->key) {
-            free(out_priv->key);
-            return -1;
-        }
-        memcpy(out_pub->key, buf + sizeof(buf) - len, len);
-        out_pub->key_len = len;
-        out_pub->alg     = alg;
-        return 0;
+        return rsa_export_keypair(priv, pub, out_priv, out_pub);
     } else if (alg == CRYPTO_ALG_LMS) {
-        const lms_pair *pair = priv->key;
-        const mbedtls_lms_private_t *pr = &pair->priv;
-        size_t count = 1u << MBEDTLS_LMS_H_TREE_HEIGHT(
-            pr->MBEDTLS_PRIVATE(params).MBEDTLS_PRIVATE(type));
-        size_t priv_size =
-            sizeof(pr->MBEDTLS_PRIVATE(params)) +
-            sizeof(pr->MBEDTLS_PRIVATE(q_next_usable_key)) +
-            count * sizeof(mbedtls_lmots_private_t) +
-            count * sizeof(mbedtls_lmots_public_t) +
-            sizeof(pr->MBEDTLS_PRIVATE(have_private_key));
-        unsigned char *pbuf = malloc(priv_size);
-        if (!pbuf) {
-            return -1;
-        }
-        unsigned char *p = pbuf;
-        /* mbed TLS exposes no official serialization API for
-         * mbedtls_lms_private_t. We copy internal fields accessed via
-         * MBEDTLS_PRIVATE to flatten the structure, which is inherently
-         * fragile and may break with future library changes. */
-        memcpy(p, &pr->MBEDTLS_PRIVATE(params),
-               sizeof(pr->MBEDTLS_PRIVATE(params)));
-        p += sizeof(pr->MBEDTLS_PRIVATE(params));
-        memcpy(p, &pr->MBEDTLS_PRIVATE(q_next_usable_key),
-               sizeof(pr->MBEDTLS_PRIVATE(q_next_usable_key)));
-        p += sizeof(pr->MBEDTLS_PRIVATE(q_next_usable_key));
-        memcpy(p, pr->MBEDTLS_PRIVATE(ots_private_keys),
-               count * sizeof(mbedtls_lmots_private_t));
-        p += count * sizeof(mbedtls_lmots_private_t);
-        memcpy(p, pr->MBEDTLS_PRIVATE(ots_public_keys),
-               count * sizeof(mbedtls_lmots_public_t));
-        p += count * sizeof(mbedtls_lmots_public_t);
-        memcpy(p, &pr->MBEDTLS_PRIVATE(have_private_key),
-               sizeof(pr->MBEDTLS_PRIVATE(have_private_key)));
-        out_priv->key     = pbuf;
-        out_priv->key_len = priv_size;
-        out_priv->alg     = alg;
-
-        size_t pub_len = MBEDTLS_LMS_PUBLIC_KEY_LEN(
-            pr->MBEDTLS_PRIVATE(params).MBEDTLS_PRIVATE(type));
-        unsigned char *pub_buf = malloc(pub_len);
-        if (!pub_buf) {
-            free(pbuf);
-            return -1;
-        }
-        size_t olen = 0;
-        if (mbedtls_lms_export_public_key(&pair->pub, pub_buf, pub_len,
-                                          &olen) != 0 || olen != pub_len) {
-            free(pbuf);
-            free(pub_buf);
-            return -1;
-        }
-        out_pub->key     = pub_buf;
-        out_pub->key_len = pub_len;
-        out_pub->alg     = alg;
-        return 0;
+        return lms_export_keypair(priv, pub, out_priv, out_pub);
     } else if (alg == CRYPTO_ALG_MLDSA87) {
-        out_priv->key = malloc(priv->key_len);
-        out_pub->key  = malloc(pub->key_len);
-        if (!out_priv->key || !out_pub->key) {
-            free(out_priv->key);
-            free(out_pub->key);
-            return -1;
-        }
-        memcpy(out_priv->key, priv->key, priv->key_len);
-        memcpy(out_pub->key, pub->key, pub->key_len);
-        out_priv->key_len = priv->key_len;
-        out_pub->key_len  = pub->key_len;
-        out_priv->alg     = alg;
-        out_pub->alg      = alg;
-        return 0;
+        return mldsa_export_keypair(priv, pub, out_priv, out_pub);
     }
     return -1;
 }
@@ -788,15 +527,11 @@ void crypto_free_key(crypto_key *key)
         return;
     }
     if (key->alg == CRYPTO_ALG_RSA4096) {
-        mbedtls_pk_free((mbedtls_pk_context *)key->key);
-        free(key->key);
+        rsa_free_key(key);
     } else if (key->alg == CRYPTO_ALG_LMS) {
-        lms_pair *pair = key->key;
-        mbedtls_lms_private_free(&pair->priv);
-        mbedtls_lms_public_free(&pair->pub);
-        free(pair);
+        lms_free_key(key);
     } else if (key->alg == CRYPTO_ALG_MLDSA87) {
-        free(key->key);
+        mldsa_free_key(key);
     } else if (crypto_is_hybrid_alg(key->alg)) {
         hybrid_pair *pair = key->key;
         crypto_free_key(&pair->first_priv);
@@ -806,6 +541,13 @@ void crypto_free_key(crypto_key *key)
         pair->second_pub.key = NULL;
         crypto_free_key(&pair->second_pub);
         free(pair);
+        key->key     = NULL;
+        key->key_len = 0;
+        return;
+    } else {
+        key->key = NULL;
+        key->key_len = 0;
+        return;
     }
     key->key     = NULL;
     key->key_len = 0;

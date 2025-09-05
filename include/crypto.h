@@ -79,6 +79,8 @@ int crypto_hybrid_export_keypairs(crypto_alg alg, const crypto_key *priv,
                                   crypto_key out_priv[2],
                                   crypto_key out_pub[2]);
 
+int crypto_hybrid_get_sig_lens(crypto_alg alg, size_t *len1, size_t *len2);
+
 void crypto_free_key(crypto_key *key);
 
 #ifdef __cplusplus

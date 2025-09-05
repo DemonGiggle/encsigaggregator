@@ -242,10 +242,11 @@ static void test_rsa_lms_sign_verify(void **state) {
     assert_int_equal(crypto_sign(CRYPTO_ALG_RSA4096_LMS, &priv,
                                  msg, sizeof(msg) - 1,
                                  sig, &sig_len), 0);
-    assert_int_equal(sig_len,
-                     CRYPTO_RSA_SIG_SIZE +
-                     MBEDTLS_LMS_SIG_LEN(MBEDTLS_LMS_SHA256_M32_H10,
-                                         MBEDTLS_LMOTS_SHA256_N32_W8));
+    size_t len1 = 0;
+    size_t len2 = 0;
+    assert_int_equal(crypto_hybrid_get_sig_lens(CRYPTO_ALG_RSA4096_LMS,
+                                                &len1, &len2), 0);
+    assert_int_equal(sig_len, len1 + len2);
     assert_int_equal(crypto_verify(CRYPTO_ALG_RSA4096_LMS, &pub,
                                    msg, sizeof(msg) - 1,
                                    sig, sig_len), 0);
@@ -265,8 +266,11 @@ static void test_rsa_mldsa_sign_verify(void **state) {
     assert_int_equal(crypto_sign(CRYPTO_ALG_RSA4096_MLDSA87, &priv,
                                  msg, sizeof(msg) - 1,
                                  sig, &sig_len), 0);
-    assert_int_equal(sig_len,
-                     CRYPTO_RSA_SIG_SIZE + PQCLEAN_MLDSA87_CLEAN_CRYPTO_BYTES);
+    size_t len1 = 0;
+    size_t len2 = 0;
+    assert_int_equal(crypto_hybrid_get_sig_lens(CRYPTO_ALG_RSA4096_MLDSA87,
+                                                &len1, &len2), 0);
+    assert_int_equal(sig_len, len1 + len2);
     assert_int_equal(crypto_verify(CRYPTO_ALG_RSA4096_MLDSA87, &pub,
                                    msg, sizeof(msg) - 1,
                                    sig, sig_len), 0);
@@ -286,10 +290,11 @@ static void test_lms_mldsa_sign_verify(void **state) {
     assert_int_equal(crypto_sign(CRYPTO_ALG_LMS_MLDSA87, &priv,
                                  msg, sizeof(msg) - 1,
                                  sig, &sig_len), 0);
-    assert_int_equal(sig_len,
-                     MBEDTLS_LMS_SIG_LEN(MBEDTLS_LMS_SHA256_M32_H10,
-                                         MBEDTLS_LMOTS_SHA256_N32_W8) +
-                     PQCLEAN_MLDSA87_CLEAN_CRYPTO_BYTES);
+    size_t len1 = 0;
+    size_t len2 = 0;
+    assert_int_equal(crypto_hybrid_get_sig_lens(CRYPTO_ALG_LMS_MLDSA87,
+                                                &len1, &len2), 0);
+    assert_int_equal(sig_len, len1 + len2);
     assert_int_equal(crypto_verify(CRYPTO_ALG_LMS_MLDSA87, &pub,
                                    msg, sizeof(msg) - 1,
                                    sig, sig_len), 0);
@@ -377,19 +382,9 @@ static void outputs_roundtrip(crypto_alg alg) {
         comp_idx++;
     }
     if (key_count == 2) {
-        size_t len1 = 0, len2 = 0;
-        if (alg == CRYPTO_ALG_RSA4096_LMS) {
-            len1 = CRYPTO_RSA_SIG_SIZE;
-            len2 = MBEDTLS_LMS_SIG_LEN(MBEDTLS_LMS_SHA256_M32_H10,
-                                       MBEDTLS_LMOTS_SHA256_N32_W8);
-        } else if (alg == CRYPTO_ALG_RSA4096_MLDSA87) {
-            len1 = CRYPTO_RSA_SIG_SIZE;
-            len2 = PQCLEAN_MLDSA87_CLEAN_CRYPTO_BYTES;
-        } else {
-            len1 = MBEDTLS_LMS_SIG_LEN(MBEDTLS_LMS_SHA256_M32_H10,
-                                       MBEDTLS_LMOTS_SHA256_N32_W8);
-            len2 = PQCLEAN_MLDSA87_CLEAN_CRYPTO_BYTES;
-        }
+        size_t len1 = 0;
+        size_t len2 = 0;
+        assert_int_equal(crypto_hybrid_get_sig_lens(alg, &len1, &len2), 0);
         sprintf(comps[comp_idx].name, "sig0");
         comps[comp_idx].data = sig;
         comps[comp_idx].len  = len1;

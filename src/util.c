@@ -140,22 +140,8 @@ int write_outputs(const char *out_path, int include_keys,
                 goto error;
             }
 
-            switch (priv->alg) {
-            case CRYPTO_ALG_RSA4096_LMS:
-                sig_lens[0] = CRYPTO_RSA_SIG_SIZE;
-                sig_lens[1] = MBEDTLS_LMS_SIG_LEN(MBEDTLS_LMS_SHA256_M32_H10,
-                                                  MBEDTLS_LMOTS_SHA256_N32_W8);
-                break;
-            case CRYPTO_ALG_RSA4096_MLDSA87:
-                sig_lens[0] = CRYPTO_RSA_SIG_SIZE;
-                sig_lens[1] = PQCLEAN_MLDSA87_CLEAN_CRYPTO_BYTES;
-                break;
-            case CRYPTO_ALG_LMS_MLDSA87:
-                sig_lens[0] = MBEDTLS_LMS_SIG_LEN(MBEDTLS_LMS_SHA256_M32_H10,
-                                                  MBEDTLS_LMOTS_SHA256_N32_W8);
-                sig_lens[1] = PQCLEAN_MLDSA87_CLEAN_CRYPTO_BYTES;
-                break;
-            default:
+            if (crypto_hybrid_get_sig_lens(priv->alg, &sig_lens[0],
+                                           &sig_lens[1]) != 0) {
                 goto error;
             }
 

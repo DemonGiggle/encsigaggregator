@@ -349,22 +349,22 @@ int crypto_sign(crypto_alg alg, const crypto_key *priv, const uint8_t *msg, size
         hybrid_pair *pair = priv->key;
         size_t len1 = 0;
         size_t len2 = 0;
-        crypto_alg first, second;
+        crypto_alg first;
+        crypto_alg second;
         if (alg == CRYPTO_ALG_RSA4096_LMS) {
             first  = CRYPTO_ALG_RSA4096;
             second = CRYPTO_ALG_LMS;
-            len1   = CRYPTO_RSA_SIG_SIZE;
-            len2   = LMS_SIG_LEN;
         } else if (alg == CRYPTO_ALG_RSA4096_MLDSA87) {
             first  = CRYPTO_ALG_RSA4096;
             second = CRYPTO_ALG_MLDSA87;
-            len1   = CRYPTO_RSA_SIG_SIZE;
-            len2   = PQCLEAN_MLDSA87_CLEAN_CRYPTO_BYTES;
         } else {
             first  = CRYPTO_ALG_LMS;
             second = CRYPTO_ALG_MLDSA87;
-            len1   = LMS_SIG_LEN;
-            len2   = PQCLEAN_MLDSA87_CLEAN_CRYPTO_BYTES;
+        }
+        if (crypto_hybrid_get_sig_lens(alg, &len1, &len2) != 0) {
+            mbedtls_ctr_drbg_free(&drbg);
+            mbedtls_entropy_free(&entropy);
+            return -1;
         }
         size_t tmp = len1;
         if (crypto_sign(first, &pair->first_priv, msg, msg_len, sig, &tmp) != 0 ||
@@ -425,22 +425,20 @@ int crypto_verify(crypto_alg alg, const crypto_key *pub, const uint8_t *msg, siz
         hybrid_pair *pair = pub->key;
         size_t len1 = 0;
         size_t len2 = 0;
-        crypto_alg first, second;
+        crypto_alg first;
+        crypto_alg second;
         if (alg == CRYPTO_ALG_RSA4096_LMS) {
             first  = CRYPTO_ALG_RSA4096;
             second = CRYPTO_ALG_LMS;
-            len1   = CRYPTO_RSA_SIG_SIZE;
-            len2   = LMS_SIG_LEN;
         } else if (alg == CRYPTO_ALG_RSA4096_MLDSA87) {
             first  = CRYPTO_ALG_RSA4096;
             second = CRYPTO_ALG_MLDSA87;
-            len1   = CRYPTO_RSA_SIG_SIZE;
-            len2   = PQCLEAN_MLDSA87_CLEAN_CRYPTO_BYTES;
         } else {
             first  = CRYPTO_ALG_LMS;
             second = CRYPTO_ALG_MLDSA87;
-            len1   = LMS_SIG_LEN;
-            len2   = PQCLEAN_MLDSA87_CLEAN_CRYPTO_BYTES;
+        }
+        if (crypto_hybrid_get_sig_lens(alg, &len1, &len2) != 0) {
+            return -1;
         }
         if (sig_len != len1 + len2) {
             return -1;
@@ -713,6 +711,27 @@ int crypto_hybrid_export_keypairs(crypto_alg alg, const crypto_key *priv,
             memset(out_pub, 0, sizeof(crypto_key) * 2);
             return -1;
         }
+        return 0;
+    }
+    return -1;
+}
+
+int crypto_hybrid_get_sig_lens(crypto_alg alg, size_t *len1, size_t *len2)
+{
+    if (len1 == NULL || len2 == NULL) {
+        return -1;
+    }
+    if (alg == CRYPTO_ALG_RSA4096_LMS) {
+        *len1 = CRYPTO_RSA_SIG_SIZE;
+        *len2 = LMS_SIG_LEN;
+        return 0;
+    } else if (alg == CRYPTO_ALG_RSA4096_MLDSA87) {
+        *len1 = CRYPTO_RSA_SIG_SIZE;
+        *len2 = PQCLEAN_MLDSA87_CLEAN_CRYPTO_BYTES;
+        return 0;
+    } else if (alg == CRYPTO_ALG_LMS_MLDSA87) {
+        *len1 = LMS_SIG_LEN;
+        *len2 = PQCLEAN_MLDSA87_CLEAN_CRYPTO_BYTES;
         return 0;
     }
     return -1;

@@ -29,7 +29,6 @@ int main(int argc, char **argv)
     uint8_t *sig = NULL;
     uint8_t *enc = NULL;
     crypto_key priv = {0}, pub = {0};
-    crypto_key priv_ser = {0}, pub_ser = {0};
 
     /* Load the input file */
     size_t fsize = 0;
@@ -77,20 +76,8 @@ int main(int argc, char **argv)
         goto cleanup;
     }
 
-    const crypto_key *priv_out = &priv;
-    const crypto_key *pub_out  = &pub;
-    if (generate) {
-        if (crypto_export_keypair(opts.alg, &priv, &pub,
-                                  &priv_ser, &pub_ser) != 0) {
-            fprintf(stderr, "Key export failed\n");
-            goto cleanup;
-        }
-        priv_out = &priv_ser;
-        pub_out  = &pub_ser;
-    }
-
     /* Write everything to the requested output */
-    if (write_outputs(opts.outfile, generate, priv_out, pub_out,
+    if (write_outputs(opts.outfile, generate, &priv, &pub,
                       aes_key, opts.aes_bits / 8,
                       iv, sig, sig_len, enc, enc_len) != 0) {
         fprintf(stderr, "Write failed\n");
@@ -103,10 +90,6 @@ cleanup:
     free(buf);
     free(sig);
     free(enc);
-    if (generate) {
-        free(priv_ser.key);
-        free(pub_ser.key);
-    }
     crypto_free_key(&priv); /* pub shares context */
     return ret;
 }

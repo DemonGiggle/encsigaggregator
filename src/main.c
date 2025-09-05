@@ -6,10 +6,6 @@
 #include "crypto.h"
 #include "util.h"
 
-
-
-
-
 int main(int argc, char **argv)
 {
     cli_options opts;

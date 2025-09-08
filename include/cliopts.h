@@ -8,26 +8,42 @@
 extern "C" {
 #endif
 
-/** Parsed command-line parameters. */
+/**
+ * struct cli_options - parsed command-line parameters
+ * @alg:          selected signing algorithm
+ * @aes_bits:     AES key size in bits
+ * @infile:       path to input file
+ * @outfile:      path to output file
+ * @pk_path:      public key file path
+ * @sk_path:      private key file path
+ * @aes_key_path: AES key file path
+ * @aes_iv_path:  AES IV file path
+ */
 typedef struct {
-    crypto_alg alg;           /**< selected signing algorithm */
-    size_t aes_bits;          /**< AES key size in bits */
-    const char *infile;       /**< path to input file */
-    const char *outfile;      /**< path to output file */
-    const char *pk_path;      /**< public key file path */
-    const char *sk_path;      /**< private key file path */
-    const char *aes_key_path; /**< AES key file path */
-    const char *aes_iv_path;  /**< AES IV file path */
+    crypto_alg alg;
+    size_t aes_bits;
+    const char *infile;
+    const char *outfile;
+    const char *pk_path;
+    const char *sk_path;
+    const char *aes_key_path;
+    const char *aes_iv_path;
 } cli_options;
 
 /**
- * @brief Parse argc/argv into opts.
+ * cli_parse_args - parse argc/argv into opts
+ * @argc: argument count
+ * @argv: argument vector
+ * @opts: parsed options
  *
- * @return 0 on success, -1 on error.
+ * Return: 0 on success, -1 on error.
  */
 int cli_parse_args(int argc, char **argv, cli_options *opts);
 
-/** @brief Print usage information for the program. */
+/**
+ * cli_usage - print usage information for the program
+ * @prog: program name
+ */
 void cli_usage(const char *prog);
 
 #ifdef __cplusplus

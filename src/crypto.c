@@ -13,15 +13,21 @@
 #include <mbedtls/md.h>
 #include <mbedtls/lms.h>
 
-/** Holds key material for algorithms composed of two independent schemes. */
+/**
+ * struct hybrid_pair - key material for algorithms composed of two schemes
+ * @first_priv: first private key
+ * @first_pub: first public key
+ * @second_priv: second private key
+ * @second_pub: second public key
+ */
 typedef struct {
-    crypto_key first_priv;  /**< first private key */
-    crypto_key first_pub;   /**< first public key */
-    crypto_key second_priv; /**< second private key */
-    crypto_key second_pub;  /**< second public key */
+    crypto_key first_priv;
+    crypto_key first_pub;
+    crypto_key second_priv;
+    crypto_key second_pub;
 } hybrid_pair;
 
-/** Signature length for the LMS parameter set used. */
+/* Signature length for the LMS parameter set used */
 #define LMS_SIG_LEN \
     MBEDTLS_LMS_SIG_LEN(MBEDTLS_LMS_SHA256_M32_H10, MBEDTLS_LMOTS_SHA256_N32_W8)
 

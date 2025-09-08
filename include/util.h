@@ -6,16 +6,31 @@
 #include "crypto.h"
 
 /**
- * @brief Read the entire file at path into a newly allocated buffer.
+ * read_file - read the entire file at path into a newly allocated buffer
+ * @path: path to file
+ * @buf: receives allocated buffer
+ * @len: receives number of bytes read
  *
- * On success, @p *buf will point to the allocated data and @p *len contains
- * the number of bytes read. The caller is responsible for freeing @p *buf.
- *
- * @return 0 on success, -1 on failure.
+ * Return: 0 on success, -1 on failure.
  */
 int read_file(const char *path, uint8_t **buf, size_t *len);
 
-/** @brief Write encrypted data, signature, and optional keys to output files. */
+/**
+ * write_outputs - write encrypted data, signature, and optional keys to files
+ * @out_path: output file path
+ * @include_keys: non-zero to include keys
+ * @priv: private key
+ * @pub: public key
+ * @aes_key: AES key buffer
+ * @aes_key_len: length of AES key
+ * @iv: initialization vector
+ * @sig: signature buffer
+ * @sig_len: length of signature
+ * @enc: encrypted data
+ * @enc_len: length of encrypted data
+ *
+ * Return: 0 on success, -1 on failure.
+ */
 int write_outputs(const char *out_path, int include_keys,
                   const crypto_key *priv, const crypto_key *pub,
                   const uint8_t aes_key[CRYPTO_AES_MAX_KEY_SIZE],

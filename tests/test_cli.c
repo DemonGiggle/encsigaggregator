@@ -12,6 +12,16 @@
 #include <sys/wait.h>
 #include <limits.h>
 
+static void cleanup_tool_outputs(void) {
+    const char *paths[] = {
+        "sk0.bin", "sk0.hex", "pk0.bin", "pk0.hex",
+        "aes.bin", "aes.hex", "aes_iv.bin", "aes_iv.hex",
+        "sig0.bin", "sig0.hex"
+    };
+    for (size_t i = 0; i < sizeof(paths) / sizeof(paths[0]); ++i)
+        unlink(paths[i]);
+}
+
 /* Ensure parser rejects an unsupported algorithm argument. */
 void test_cli_invalid_alg(void **state) {
     (void)state;
@@ -129,17 +139,7 @@ void test_tool_gen_keypair_when_aes_provided(void **state) {
 
     assert_int_equal(access("sk0.bin", F_OK), 0);
     assert_int_equal(access("pk0.bin", F_OK), 0);
-
-    unlink("sk0.bin");
-    unlink("sk0.hex");
-    unlink("pk0.bin");
-    unlink("pk0.hex");
-    unlink("aes.bin");
-    unlink("aes.hex");
-    unlink("aes_iv.bin");
-    unlink("aes_iv.hex");
-    unlink("sig0.bin");
-    unlink("sig0.hex");
+    cleanup_tool_outputs();
     unlink(out_path);
     char hex_path[PATH_MAX];
     snprintf(hex_path, sizeof(hex_path), "%s.hex", out_path);
@@ -196,17 +196,7 @@ void test_tool_gen_aes_when_keys_provided(void **state) {
 
     assert_int_equal(access("aes.bin", F_OK), 0);
     assert_int_equal(access("aes_iv.bin", F_OK), 0);
-
-    unlink("aes.bin");
-    unlink("aes.hex");
-    unlink("aes_iv.bin");
-    unlink("aes_iv.hex");
-    unlink("sk0.bin");
-    unlink("sk0.hex");
-    unlink("pk0.bin");
-    unlink("pk0.hex");
-    unlink("sig0.bin");
-    unlink("sig0.hex");
+    cleanup_tool_outputs();
     unlink(out_path);
     char hex_path2[PATH_MAX];
     snprintf(hex_path2, sizeof(hex_path2), "%s.hex", out_path);

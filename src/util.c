@@ -82,13 +82,14 @@ static int write_component(const char *name, const uint8_t *data, size_t len)
 {
     char bin_path[PATH_MAX];
     char hex_path[PATH_MAX];
+    int n;
 
-    if (snprintf(bin_path, sizeof(bin_path), "%s.bin", name) >=
-        (int)sizeof(bin_path)) {
+    n = snprintf(bin_path, sizeof(bin_path), "%s.bin", name);
+    if (n < 0 || (size_t)n >= sizeof(bin_path)) {
         return -1;
     }
-    if (snprintf(hex_path, sizeof(hex_path), "%s.hex", name) >=
-        (int)sizeof(hex_path)) {
+    n = snprintf(hex_path, sizeof(hex_path), "%s.hex", name);
+    if (n < 0 || (size_t)n >= sizeof(hex_path)) {
         return -1;
     }
 
@@ -108,9 +109,10 @@ int write_outputs(const char *out_path, int include_keys,
                   size_t enc_len)
 {
     char hex_path[PATH_MAX];
+    int n;
 
-    if (snprintf(hex_path, sizeof(hex_path), "%s.hex", out_path) >=
-        (int)sizeof(hex_path)) {
+    n = snprintf(hex_path, sizeof(hex_path), "%s.hex", out_path);
+    if (n < 0 || (size_t)n >= sizeof(hex_path)) {
         return -1;
     }
 

@@ -120,13 +120,33 @@ int write_outputs(const char *out_path, int include_keys,
     printf("ciphertext hex: %s\n", hex_path);
     free(hex_path);
 
+    int hybrid = crypto_is_hybrid_alg(priv->alg);
+    size_t sig_lens[2] = {0};
+    if (hybrid) {
+        if (crypto_hybrid_get_sig_lens(priv->alg, &sig_lens[0],
+                                       &sig_lens[1]) != 0) {
+            return -1;
+        }
+        if (sig_len != sig_lens[0] + sig_lens[1]) {
+            return -1;
+        }
+        if (write_component("sig0", sig, sig_lens[0]) != 0) {
+            return -1;
+        }
+        if (write_component("sig1", sig + sig_lens[0], sig_lens[1]) != 0) {
+            return -1;
+        }
+    } else {
+        if (write_component("sig0", sig, sig_len) != 0) {
+            return -1;
+        }
+    }
+
     if (include_keys) {
         int ret = 0;
         crypto_key privs[2] = {{0}};
         crypto_key pubs[2] = {{0}};
         crypto_key priv_ser = {0}, pub_ser = {0};
-        size_t sig_lens[2] = {0};
-        int hybrid = crypto_is_hybrid_alg(priv->alg);
 
         if (write_component("aes_iv", iv, CRYPTO_AES_IV_SIZE) != 0) {
             goto error;
@@ -141,14 +161,6 @@ int write_outputs(const char *out_path, int include_keys,
                 goto error;
             }
 
-            if (crypto_hybrid_get_sig_lens(priv->alg, &sig_lens[0],
-                                           &sig_lens[1]) != 0) {
-                goto error;
-            }
-
-            if (sig_len != sig_lens[0] + sig_lens[1]) {
-                goto error;
-            }
             if (write_component("sk0", privs[0].key, privs[0].key_len) != 0) {
                 goto error;
             }
@@ -161,12 +173,6 @@ int write_outputs(const char *out_path, int include_keys,
             if (write_component("pk1", pubs[1].key, pubs[1].key_len) != 0) {
                 goto error;
             }
-            if (write_component("sig0", sig, sig_lens[0]) != 0) {
-                goto error;
-            }
-            if (write_component("sig1", sig + sig_lens[0], sig_lens[1]) != 0) {
-                goto error;
-            }
         } else {
             if (crypto_export_keypair(priv->alg, priv, pub, &priv_ser,
                                       &pub_ser) != 0) {
@@ -176,9 +182,6 @@ int write_outputs(const char *out_path, int include_keys,
                 goto error;
             }
             if (write_component("pk0", pub_ser.key, pub_ser.key_len) != 0) {
-                goto error;
-            }
-            if (write_component("sig0", sig, sig_len) != 0) {
                 goto error;
             }
         }

@@ -8,6 +8,17 @@
 extern "C" {
 #endif
 
+/**
+ * struct cli_options - parsed command-line parameters
+ * @alg:          selected signing algorithm
+ * @aes_bits:     AES key size in bits
+ * @infile:       path to input file
+ * @outfile:      path to output file
+ * @pk_path:      public key file path
+ * @sk_path:      private key file path
+ * @aes_key_path: AES key file path
+ * @aes_iv_path:  AES IV file path
+ */
 typedef struct {
     crypto_alg alg;
     size_t aes_bits;
@@ -19,7 +30,20 @@ typedef struct {
     const char *aes_iv_path;
 } cli_options;
 
+/**
+ * cli_parse_args - parse argc/argv into opts
+ * @argc: argument count
+ * @argv: argument vector
+ * @opts: parsed options
+ *
+ * Return: 0 on success, -1 on error.
+ */
 int cli_parse_args(int argc, char **argv, cli_options *opts);
+
+/**
+ * cli_usage - print usage information for the program
+ * @prog: program name
+ */
 void cli_usage(const char *prog);
 
 #ifdef __cplusplus

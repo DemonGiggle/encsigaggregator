@@ -4,6 +4,11 @@
 #include <mbedtls/entropy.h>
 #include <mbedtls/lms.h>
 
+/**
+ * struct lms_pair - container for an LMS private/public key pair
+ * @priv: private key
+ * @pub: corresponding public key
+ */
 typedef struct {
     mbedtls_lms_private_t priv;
     mbedtls_lms_public_t pub;

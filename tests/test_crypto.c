@@ -1,4 +1,4 @@
-#define _POSIX_C_SOURCE 200809L
+#define _POSIX_C_SOURCE 200809L /* for mkstemp and related functions */
 #include "crypto.h"
 #include "util.h"
 #include <stdarg.h>
@@ -14,7 +14,7 @@
 #include <unistd.h>
 #include "api.h"
 
-/* Compute SHA-384 of 'abc' and compare against known vector. */
+/* Compute SHA-384 of 'abc' and compare against known vector */
 static void test_sha384(void **state) {
     (void)state;
     uint8_t out[CRYPTO_SHA384_DIGEST_SIZE];
@@ -30,7 +30,7 @@ static void test_sha384(void **state) {
     assert_memory_equal(out, expected, CRYPTO_SHA384_DIGEST_SIZE);
 }
 
-/* Encrypt and decrypt a block-aligned payload with AES-CBC. */
+/* Encrypt and decrypt a block-aligned payload with AES-CBC */
 static void test_aes_cbc(void **state) {
     (void)state;
     uint8_t key[CRYPTO_AES_MAX_KEY_SIZE];
@@ -52,7 +52,7 @@ static void test_aes_cbc(void **state) {
     assert_memory_equal(dec, plaintext, 32);
 }
 
-/* Encrypt and decrypt data whose length is not a multiple of the block size. */
+/* Encrypt and decrypt data whose length is not a multiple of the block size */
 static void test_aes_cbc_unaligned(void **state) {
     (void)state;
     uint8_t key[CRYPTO_AES_MAX_KEY_SIZE];
@@ -74,7 +74,7 @@ static void test_aes_cbc_unaligned(void **state) {
     assert_memory_equal(dec, plaintext, sizeof(plaintext) - 1);
 }
 
-/* Handle AES-CBC operations on an empty plaintext. */
+/* Handle AES-CBC operations on an empty plaintext */
 static void test_aes_cbc_empty(void **state) {
     (void)state;
     uint8_t key[CRYPTO_AES_MAX_KEY_SIZE];
@@ -97,6 +97,7 @@ static void test_aes_cbc_empty(void **state) {
 #include <stdio.h>
 #include <unistd.h>
 
+/* Temporary file paths for AES key/IV used in tests */
 struct aes_paths {
     char key_path[sizeof("/tmp/keyXXXXXX")];
     char iv_path[sizeof("/tmp/ivXXXXXX")];
@@ -166,7 +167,7 @@ static void test_aes_serialize_256(void **state) {
     aes_roundtrip(CRYPTO_AES_KEY_BITS_256, (const struct aes_paths *)*state);
 }
 
-/* Generate RSA key pair and verify signing round-trip. */
+/* Generate RSA key pair and verify signing round-trip */
 static void test_rsa_sign_verify(void **state) {
     (void)state;
     crypto_key priv = {0}, pub = {0};
@@ -188,7 +189,7 @@ static void test_rsa_sign_verify(void **state) {
     crypto_free_key(&pub);
 }
 
-/* Generate LMS key pair and verify signing round-trip. */
+/* Generate LMS key pair and verify signing round-trip */
 static void test_lms_sign_verify(void **state) {
     (void)state;
     crypto_key priv = {0}, pub = {0};
@@ -212,7 +213,7 @@ static void test_lms_sign_verify(void **state) {
     crypto_free_key(&pub);
 }
 
-/* Ensure LMS q_next_usable_key is preserved across serialization. */
+/* Ensure LMS q_next_usable_key is preserved across serialization */
 static void test_lms_q_next_usable_key(void **state) {
     (void)state;
     crypto_key priv = {0}, pub = {0};
@@ -267,7 +268,7 @@ static void test_lms_q_next_usable_key(void **state) {
     crypto_free_key(&pub);
 }
 
-/* Generate ML-DSA key pair and verify signing round-trip. */
+/* Generate ML-DSA key pair and verify signing round-trip */
 static void test_mldsa_sign_verify(void **state) {
     (void)state;
     crypto_key priv = {0}, pub = {0};
@@ -287,7 +288,7 @@ static void test_mldsa_sign_verify(void **state) {
     crypto_free_key(&pub);
 }
 
-/* Verify combined RSA+LMS hybrid signature workflow. */
+/* Verify combined RSA+LMS hybrid signature workflow */
 static void test_rsa_lms_sign_verify(void **state) {
     (void)state;
     crypto_key priv = {0}, pub = {0};
@@ -317,7 +318,7 @@ static void test_rsa_lms_sign_verify(void **state) {
     crypto_free_key(&pub);
 }
 
-/* Verify combined RSA+ML-DSA hybrid signature workflow. */
+/* Verify combined RSA+ML-DSA hybrid signature workflow */
 static void test_rsa_mldsa_sign_verify(void **state) {
     (void)state;
     crypto_key priv = {0}, pub = {0};
@@ -347,7 +348,7 @@ static void test_rsa_mldsa_sign_verify(void **state) {
     crypto_free_key(&pub);
 }
 
-/* Verify combined LMS+ML-DSA hybrid signature workflow. */
+/* Verify combined LMS+ML-DSA hybrid signature workflow */
 static void test_lms_mldsa_sign_verify(void **state) {
     (void)state;
     crypto_key priv = {0}, pub = {0};
@@ -535,7 +536,7 @@ static void test_lms_mldsa_outputs(void **state) {
     outputs_roundtrip(CRYPTO_ALG_LMS_MLDSA87);
 }
 
-/* Reject invalid parameters to AES initialisation routine. */
+/* Reject invalid parameters to AES initialisation routine */
 static void test_crypto_init_aes_invalid(void **state) {
     (void)state;
     uint8_t key[CRYPTO_AES_MAX_KEY_SIZE];
@@ -545,7 +546,7 @@ static void test_crypto_init_aes_invalid(void **state) {
     assert_int_equal(crypto_init_aes(CRYPTO_AES_KEY_BITS_128, NULL, NULL, key, NULL), -1);
 }
 
-/* Reject invalid arguments to SHA-384 helper. */
+/* Reject invalid arguments to SHA-384 helper */
 static void test_crypto_sha384_invalid(void **state) {
     (void)state;
     uint8_t out[CRYPTO_SHA384_DIGEST_SIZE];
@@ -553,7 +554,7 @@ static void test_crypto_sha384_invalid(void **state) {
     assert_int_equal(crypto_sha384((const uint8_t *)"a", 1, NULL), -1);
 }
 
-/* Reject invalid parameters to AES-CBC encryption. */
+/* Reject invalid parameters to AES-CBC encryption */
 static void test_crypto_encrypt_invalid(void **state) {
     (void)state;
     uint8_t key[CRYPTO_AES_IV_SIZE] = {0};
@@ -578,7 +579,7 @@ static void test_crypto_encrypt_invalid(void **state) {
                                            NULL), -1);
 }
 
-/* Reject improper arguments to signing function. */
+/* Reject improper arguments to signing function */
 static void test_crypto_sign_invalid(void **state) {
     (void)state;
     crypto_key priv = {0};
@@ -590,7 +591,7 @@ static void test_crypto_sign_invalid(void **state) {
     assert_int_equal(crypto_sign(CRYPTO_ALG_RSA4096, &priv, (uint8_t *)"a", 1, sig, NULL), -1);
 }
 
-/* Reject improper arguments to signature verification function. */
+/* Reject improper arguments to signature verification function */
 static void test_crypto_verify_invalid(void **state) {
     (void)state;
     crypto_key pub = {0};

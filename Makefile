@@ -47,7 +47,7 @@ encsigtool: libcrypto.a $(TOOL_OBJ)
 $(TEST_BIN): $(MBEDTLS_LIBS) $(PQ_LIB) libcrypto.a $(TEST_OBJ)
 	$(CC) $(CFLAGS) -o $@ $(TEST_OBJ) -Wl,--start-group libcrypto.a $(LDFLAGS) -Wl,--end-group -lcmocka
 
-test: $(MBEDTLS_LIBS) $(PQ_LIB) $(TEST_BIN)
+test: $(MBEDTLS_LIBS) $(PQ_LIB) encsigtool $(TEST_BIN)
 	$(TEST_BIN)
 
 debug: CFLAGS += -g -O0

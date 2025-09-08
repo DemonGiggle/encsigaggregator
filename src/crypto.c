@@ -2,6 +2,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <limits.h>
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
 #include "util.h"
 #include "lms.h"
 #include "rsa.h"
@@ -26,6 +30,30 @@ typedef struct {
     crypto_key second_priv;
     crypto_key second_pub;
 } hybrid_pair;
+
+/* Split a comma-separated path list into two buffers */
+static int split_paths(const char *paths, char first[PATH_MAX], char second[PATH_MAX])
+{
+    if (!paths || !first || !second) {
+        return -1;
+    }
+    const char *comma = strchr(paths, ',');
+    if (!comma) {
+        return -1;
+    }
+    size_t len0 = (size_t)(comma - paths);
+    if (len0 >= PATH_MAX) {
+        return -1;
+    }
+    memcpy(first, paths, len0);
+    first[len0] = '\0';
+    size_t len1 = strlen(comma + 1);
+    if (len1 >= PATH_MAX) {
+        return -1;
+    }
+    memcpy(second, comma + 1, len1 + 1);
+    return 0;
+}
 
 /* Signature length for the LMS parameter set used */
 #define LMS_SIG_LEN \
@@ -146,6 +174,65 @@ cleanup:
     return ret;
 }
 
+static int load_simple_keypair(crypto_alg alg, const char *priv_path, const char *pub_path,
+                               crypto_key *out_priv, crypto_key *out_pub)
+{
+    int ret = -1;
+    if (alg == CRYPTO_ALG_RSA4096) {
+        ret = rsa_load_keypair(priv_path, pub_path, out_priv, out_pub);
+    } else if (alg == CRYPTO_ALG_LMS) {
+        ret = lms_load_keypair(priv_path, pub_path, out_priv, out_pub);
+    } else if (alg == CRYPTO_ALG_MLDSA87) {
+        ret = mldsa_load_keypair(priv_path, pub_path, out_priv, out_pub);
+    }
+    if (ret != 0) {
+        return crypto_keygen(alg, out_priv, out_pub);
+    }
+    return ret;
+}
+
+static int load_hybrid_keypair(crypto_alg alg, const char *priv_path, const char *pub_path,
+                               crypto_key *out_priv, crypto_key *out_pub)
+{
+    char priv0[PATH_MAX];
+    char priv1[PATH_MAX];
+    char pub0[PATH_MAX];
+    char pub1[PATH_MAX];
+    hybrid_pair *pair = NULL;
+    crypto_alg first, second;
+
+    if (split_paths(priv_path, priv0, priv1) != 0 ||
+        split_paths(pub_path, pub0, pub1) != 0) {
+        return -1;
+    }
+
+    pair = calloc(1, sizeof(*pair));
+    if (!pair) {
+        return -1;
+    }
+
+    if (crypto_hybrid_get_algs(alg, &first, &second) != 0 ||
+        crypto_load_keypair(first, priv0, pub0, &pair->first_priv, &pair->first_pub) != 0 ||
+        crypto_load_keypair(second, priv1, pub1, &pair->second_priv, &pair->second_pub) != 0) {
+        pair->first_pub.key = NULL;
+        crypto_free_key(&pair->first_priv);
+        crypto_free_key(&pair->first_pub);
+        pair->second_pub.key = NULL;
+        crypto_free_key(&pair->second_priv);
+        crypto_free_key(&pair->second_pub);
+        free(pair);
+        return -1;
+    }
+
+    out_priv->alg = alg;
+    out_pub->alg  = alg;
+    out_priv->key = pair;
+    out_pub->key  = pair;
+    out_priv->key_len = sizeof(*pair);
+    out_pub->key_len  = sizeof(*pair);
+    return 0;
+}
+
 int crypto_load_keypair(crypto_alg alg, const char *priv_path, const char *pub_path,
                         crypto_key *out_priv, crypto_key *out_pub)
 {
@@ -157,22 +244,9 @@ int crypto_load_keypair(crypto_alg alg, const char *priv_path, const char *pub_p
     }
 
     if (crypto_is_hybrid_alg(alg)) {
-        return crypto_keygen(alg, out_priv, out_pub);
+        return load_hybrid_keypair(alg, priv_path, pub_path, out_priv, out_pub);
     }
-
-    int ret = -1;
-    if (alg == CRYPTO_ALG_RSA4096) {
-        ret = rsa_load_keypair(priv_path, pub_path, out_priv, out_pub);
-    } else if (alg == CRYPTO_ALG_LMS) {
-        ret = lms_load_keypair(priv_path, pub_path, out_priv, out_pub);
-    } else if (alg == CRYPTO_ALG_MLDSA87) {
-        ret = mldsa_load_keypair(priv_path, pub_path, out_priv, out_pub);
-    }
-
-    if (ret != 0) {
-        return crypto_keygen(alg, out_priv, out_pub);
-    }
-    return ret;
+    return load_simple_keypair(alg, priv_path, pub_path, out_priv, out_pub);
 }
 
 int crypto_sign(crypto_alg alg, const crypto_key *priv, const uint8_t *msg, size_t msg_len,

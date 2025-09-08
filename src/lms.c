@@ -4,9 +4,10 @@
 #include <mbedtls/entropy.h>
 #include <mbedtls/lms.h>
 
+/** Container for an LMS private/public key pair. */
 typedef struct {
-    mbedtls_lms_private_t priv;
-    mbedtls_lms_public_t pub;
+    mbedtls_lms_private_t priv; /**< private key */
+    mbedtls_lms_public_t pub;   /**< corresponding public key */
 } lms_pair;
 
 static int rng_callback(void *ctx, unsigned char *out, size_t len) {

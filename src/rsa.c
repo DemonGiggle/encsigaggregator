@@ -6,6 +6,7 @@
 #include <mbedtls/md.h>
 #include "util.h"
 
+/** Maximum size of a DER-encoded RSA key we expect to handle. */
 #define RSA_DER_MAX_LEN 4096
 
 static int rng_callback(void *ctx, unsigned char *out, size_t len) {

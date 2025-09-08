@@ -536,6 +536,70 @@ static void test_lms_mldsa_outputs(void **state) {
     outputs_roundtrip(CRYPTO_ALG_LMS_MLDSA87);
 }
 
+/* When keys are provided, only the signature should be output */
+static void test_outputs_signature_only(void **state) {
+    (void)state;
+    crypto_key priv = {0}, pub = {0};
+    assert_int_equal(crypto_keygen(CRYPTO_ALG_RSA4096, &priv, &pub), 0);
+
+    uint8_t aes_key[CRYPTO_AES_MAX_KEY_SIZE];
+    uint8_t iv[CRYPTO_AES_IV_SIZE];
+    assert_int_equal(crypto_init_aes(CRYPTO_AES_KEY_BITS_128, NULL, NULL,
+                                     aes_key, iv), 0);
+
+    const uint8_t msg[] = "sig only";
+    size_t sig_len = CRYPTO_MAX_SIG_SIZE;
+    uint8_t *sig = malloc(sig_len);
+    assert_non_null(sig);
+    assert_int_equal(crypto_sign(CRYPTO_ALG_RSA4096, &priv,
+                                 msg, sizeof(msg) - 1,
+                                 sig, &sig_len), 0);
+
+    size_t enc_len = sizeof(msg) - 1;
+    size_t rem = enc_len % CRYPTO_AES_IV_SIZE;
+    enc_len += CRYPTO_AES_IV_SIZE - rem;
+    uint8_t *enc = malloc(enc_len);
+    assert_non_null(enc);
+    assert_int_equal(crypto_encrypt_aescbc(aes_key, CRYPTO_AES_KEY_BITS_128,
+                                          iv, msg, sizeof(msg) - 1,
+                                          enc, &enc_len), 0);
+
+    char out_path[] = "/tmp/outXXXXXX";
+    int fd = mkstemp(out_path);
+    assert_true(fd != -1);
+    close(fd);
+
+    assert_int_equal(write_outputs(out_path, 0, &priv, &pub,
+                                   aes_key, CRYPTO_AES_KEY_BITS_128 / 8,
+                                   iv, sig, sig_len, enc, enc_len), 0);
+
+    uint8_t *tmp = NULL;
+    size_t len = 0;
+    assert_int_equal(read_file("sig0.bin", &tmp, &len), 0);
+    assert_int_equal(len, sig_len);
+    assert_memory_equal(tmp, sig, sig_len);
+    free(tmp);
+
+    assert_int_equal(access("aes.bin", F_OK), -1);
+    assert_int_equal(access("aes_iv.bin", F_OK), -1);
+    assert_int_equal(access("sk0.bin", F_OK), -1);
+    assert_int_equal(access("pk0.bin", F_OK), -1);
+
+    unlink("sig0.bin");
+    unlink("sig0.hex");
+    char *hex_path = malloc(strlen(out_path) + 5);
+    assert_non_null(hex_path);
+    sprintf(hex_path, "%s.hex", out_path);
+    unlink(out_path);
+    unlink(hex_path);
+    free(hex_path);
+    free(sig);
+    free(enc);
+    crypto_free_key(&priv);
+    pub.key = NULL;
+    crypto_free_key(&pub);
+}
+
 /* Reject invalid parameters to AES initialisation routine */
 static void test_crypto_init_aes_invalid(void **state) {
     (void)state;
@@ -622,6 +686,7 @@ const struct CMUnitTest crypto_tests[] = {
     cmocka_unit_test(test_rsa_lms_outputs),
     cmocka_unit_test(test_rsa_mldsa_outputs),
     cmocka_unit_test(test_lms_mldsa_outputs),
+    cmocka_unit_test(test_outputs_signature_only),
     cmocka_unit_test(test_crypto_init_aes_invalid),
     cmocka_unit_test(test_crypto_sha384_invalid),
     cmocka_unit_test(test_crypto_encrypt_invalid),

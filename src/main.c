@@ -13,12 +13,19 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    /* Determine if all crypto material is provided */
-    int generate = !(opts.pk_path || opts.sk_path || opts.aes_key_path || opts.aes_iv_path);
-    if (!generate && (!opts.pk_path || !opts.sk_path || !opts.aes_key_path)) {
-        fprintf(stderr, "Public key, private key and AES key files must be specified\n");
+    int have_pk = opts.pk_path && opts.sk_path;
+    int have_aes = opts.aes_key_path != NULL;
+    if ((opts.pk_path && !opts.sk_path) || (!opts.pk_path && opts.sk_path)) {
+        fprintf(stderr, "Both public and private key files must be specified\n");
         return 1;
     }
+    if (opts.aes_iv_path && !opts.aes_key_path) {
+        fprintf(stderr, "AES key file must be specified when providing IV file\n");
+        return 1;
+    }
+    int generate_pk = !have_pk;
+    int generate_aes = !have_aes;
+    int include_keys = generate_pk || generate_aes;
 
     int ret = 1;
     uint8_t *buf = NULL;
@@ -73,7 +80,7 @@ int main(int argc, char **argv)
     }
 
     /* Write everything to the requested output */
-    if (write_outputs(opts.outfile, generate, &priv, &pub,
+    if (write_outputs(opts.outfile, include_keys, &priv, &pub,
                       aes_key, opts.aes_bits / 8,
                       iv, sig, sig_len, enc, enc_len) != 0) {
         fprintf(stderr, "Write failed\n");

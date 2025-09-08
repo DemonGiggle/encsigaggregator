@@ -1,8 +1,16 @@
+#define _POSIX_C_SOURCE 200809L
 #include "cliopts.h"
+#include "crypto.h"
+#include "util.h"
 #include <stdarg.h>
 #include <setjmp.h>
 #include <cmocka.h>
 #include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <limits.h>
 
 /* Ensure parser rejects an unsupported algorithm argument. */
 void test_cli_invalid_alg(void **state) {
@@ -75,6 +83,146 @@ void test_cli_lms_mldsa(void **state) {
     assert_int_equal(opts.alg, CRYPTO_ALG_LMS_MLDSA87);
 }
 
+/* Generate key pair when only AES material is provided. */
+void test_tool_gen_keypair_when_aes_provided(void **state) {
+    (void)state;
+    uint8_t key[CRYPTO_AES_MAX_KEY_SIZE];
+    uint8_t iv[CRYPTO_AES_IV_SIZE];
+    assert_int_equal(crypto_init_aes(CRYPTO_AES_KEY_BITS_256, NULL, NULL, key, iv), 0);
+
+    char key_path[] = "/tmp/keyXXXXXX";
+    int kfd = mkstemp(key_path);
+    assert_true(kfd != -1);
+    FILE *f = fdopen(kfd, "wb");
+    assert_non_null(f);
+    assert_int_equal(fwrite(key, 1, CRYPTO_AES_KEY_BITS_256 / 8, f), CRYPTO_AES_KEY_BITS_256 / 8);
+    fclose(f);
+
+    char iv_path[] = "/tmp/ivXXXXXX";
+    int ifd = mkstemp(iv_path);
+    assert_true(ifd != -1);
+    f = fdopen(ifd, "wb");
+    assert_non_null(f);
+    assert_int_equal(fwrite(iv, 1, CRYPTO_AES_IV_SIZE, f), CRYPTO_AES_IV_SIZE);
+    fclose(f);
+
+    char in_path[] = "/tmp/inXXXXXX";
+    int ifd2 = mkstemp(in_path);
+    assert_true(ifd2 != -1);
+    f = fdopen(ifd2, "wb");
+    const char *msg = "data";
+    assert_int_equal(fwrite(msg, 1, strlen(msg), f), (int)strlen(msg));
+    fclose(f);
+
+    char out_path[] = "/tmp/outXXXXXX";
+    int ofd = mkstemp(out_path);
+    assert_true(ofd != -1);
+    close(ofd);
+
+    char cmd[PATH_MAX];
+    snprintf(cmd, sizeof(cmd), "./encsigtool -i %s -o %s --aes-key-path %s --aes-iv %s",
+             in_path, out_path, key_path, iv_path);
+    int ret = system(cmd);
+    assert_true(ret != -1);
+    assert_true(WIFEXITED(ret));
+    assert_int_equal(WEXITSTATUS(ret), 0);
+
+    assert_int_equal(access("sk0.bin", F_OK), 0);
+    assert_int_equal(access("pk0.bin", F_OK), 0);
+
+    unlink("sk0.bin");
+    unlink("sk0.hex");
+    unlink("pk0.bin");
+    unlink("pk0.hex");
+    unlink("aes.bin");
+    unlink("aes.hex");
+    unlink("aes_iv.bin");
+    unlink("aes_iv.hex");
+    unlink("sig0.bin");
+    unlink("sig0.hex");
+    unlink(out_path);
+    char hex_path[PATH_MAX];
+    snprintf(hex_path, sizeof(hex_path), "%s.hex", out_path);
+    unlink(hex_path);
+    unlink(in_path);
+    unlink(key_path);
+    unlink(iv_path);
+}
+
+/* Generate AES material when only key pair is provided. */
+void test_tool_gen_aes_when_keys_provided(void **state) {
+    (void)state;
+    crypto_key priv = {0}, pub = {0};
+    assert_int_equal(crypto_keygen(CRYPTO_ALG_RSA4096, &priv, &pub), 0);
+    crypto_key priv_ser = {0}, pub_ser = {0};
+    assert_int_equal(crypto_export_keypair(CRYPTO_ALG_RSA4096, &priv, &pub, &priv_ser, &pub_ser), 0);
+
+    char sk_path[] = "/tmp/skXXXXXX";
+    int skfd = mkstemp(sk_path);
+    assert_true(skfd != -1);
+    FILE *f = fdopen(skfd, "wb");
+    assert_non_null(f);
+    assert_int_equal(fwrite(priv_ser.key, 1, priv_ser.key_len, f), priv_ser.key_len);
+    fclose(f);
+
+    char pk_path[] = "/tmp/pkXXXXXX";
+    int pkfd = mkstemp(pk_path);
+    assert_true(pkfd != -1);
+    f = fdopen(pkfd, "wb");
+    assert_non_null(f);
+    assert_int_equal(fwrite(pub_ser.key, 1, pub_ser.key_len, f), pub_ser.key_len);
+    fclose(f);
+
+    char in_path[] = "/tmp/inXXXXXX";
+    int ifd = mkstemp(in_path);
+    assert_true(ifd != -1);
+    f = fdopen(ifd, "wb");
+    const char *msg = "data";
+    assert_int_equal(fwrite(msg, 1, strlen(msg), f), (int)strlen(msg));
+    fclose(f);
+
+    char out_path[] = "/tmp/outXXXXXX";
+    int ofd = mkstemp(out_path);
+    assert_true(ofd != -1);
+    close(ofd);
+
+    char cmd[PATH_MAX];
+    snprintf(cmd, sizeof(cmd), "./encsigtool -i %s -o %s --pk-path %s --sk-path %s",
+             in_path, out_path, pk_path, sk_path);
+    int ret = system(cmd);
+    assert_true(ret != -1);
+    assert_true(WIFEXITED(ret));
+    assert_int_equal(WEXITSTATUS(ret), 0);
+
+    assert_int_equal(access("aes.bin", F_OK), 0);
+    assert_int_equal(access("aes_iv.bin", F_OK), 0);
+
+    unlink("aes.bin");
+    unlink("aes.hex");
+    unlink("aes_iv.bin");
+    unlink("aes_iv.hex");
+    unlink("sk0.bin");
+    unlink("sk0.hex");
+    unlink("pk0.bin");
+    unlink("pk0.hex");
+    unlink("sig0.bin");
+    unlink("sig0.hex");
+    unlink(out_path);
+    char hex_path2[PATH_MAX];
+    snprintf(hex_path2, sizeof(hex_path2), "%s.hex", out_path);
+    unlink(hex_path2);
+    unlink(in_path);
+    unlink(pk_path);
+    unlink(sk_path);
+    free(priv_ser.key);
+    free(pub_ser.key);
+    void *shared = (priv.key == pub.key) ? priv.key : NULL;
+    crypto_free_key(&priv);
+    if (shared)
+        pub.key = NULL;
+    crypto_free_key(&pub);
+}
+
 
 const struct CMUnitTest cli_tests[] = {
     cmocka_unit_test(test_cli_invalid_alg),
@@ -85,6 +233,8 @@ const struct CMUnitTest cli_tests[] = {
     cmocka_unit_test(test_cli_rsa_lms),
     cmocka_unit_test(test_cli_rsa_mldsa),
     cmocka_unit_test(test_cli_lms_mldsa),
+    cmocka_unit_test(test_tool_gen_keypair_when_aes_provided),
+    cmocka_unit_test(test_tool_gen_aes_when_keys_provided),
 };
 
 const size_t cli_tests_count = sizeof(cli_tests) / sizeof(cli_tests[0]);

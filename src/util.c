@@ -4,6 +4,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
 
 int read_file(const char *path, uint8_t **buf, size_t *len)
 {
@@ -76,23 +80,23 @@ static int write_bin_hex_pair(const char *bin_path, const char *hex_path,
 
 static int write_component(const char *name, const uint8_t *data, size_t len)
 {
-    size_t name_len = strlen(name);
-    char *bin_path = malloc(name_len + 4 + 1);
-    char *hex_path = malloc(name_len + 4 + 1);
-    if (bin_path == NULL || hex_path == NULL) {
-        free(bin_path);
-        free(hex_path);
+    char bin_path[PATH_MAX];
+    char hex_path[PATH_MAX];
+
+    if (snprintf(bin_path, sizeof(bin_path), "%s.bin", name) >=
+        (int)sizeof(bin_path)) {
         return -1;
     }
-    sprintf(bin_path, "%s.bin", name);
-    sprintf(hex_path, "%s.hex", name);
+    if (snprintf(hex_path, sizeof(hex_path), "%s.hex", name) >=
+        (int)sizeof(hex_path)) {
+        return -1;
+    }
+
     int ret = write_bin_hex_pair(bin_path, hex_path, data, len);
     if (ret == 0) {
         printf("%s binary: %s\n", name, bin_path);
         printf("%s hex: %s\n", name, hex_path);
     }
-    free(bin_path);
-    free(hex_path);
     return ret;
 }
 
@@ -103,22 +107,19 @@ int write_outputs(const char *out_path, int include_keys,
                   const uint8_t *sig, size_t sig_len, const uint8_t *enc,
                   size_t enc_len)
 {
-    size_t out_len = strlen(out_path);
-    char *hex_path = malloc(out_len + 4 + 1);
+    char hex_path[PATH_MAX];
 
-    if (hex_path == NULL) {
+    if (snprintf(hex_path, sizeof(hex_path), "%s.hex", out_path) >=
+        (int)sizeof(hex_path)) {
         return -1;
     }
 
-    sprintf(hex_path, "%s.hex", out_path);
     if (write_bin_hex_pair(out_path, hex_path, enc, enc_len) != 0) {
-        free(hex_path);
         return -1;
     }
 
     printf("ciphertext binary: %s\n", out_path);
     printf("ciphertext hex: %s\n", hex_path);
-    free(hex_path);
 
     int hybrid = crypto_is_hybrid_alg(priv->alg);
     size_t sig_lens[2] = {0};

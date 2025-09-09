@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include "cliopts.h"
 #include "crypto.h"
+#include "hybrid_crypto.h"
 #include "util.h"
 
 int main(int argc, char **argv)
@@ -29,9 +30,10 @@ int main(int argc, char **argv)
 
     int ret = 1;
     uint8_t *buf = NULL;
-    uint8_t *sig = NULL;
+    uint8_t (*sigs)[CRYPTO_MAX_SIG_SIZE] = NULL;
     uint8_t *enc = NULL;
-    crypto_key priv = {0}, pub = {0};
+    crypto_key privs[2] = {{0}};
+    crypto_key pubs[2] = {{0}};
 
     /* Load the input file */
     size_t fsize = 0;
@@ -41,9 +43,18 @@ int main(int argc, char **argv)
     }
 
     /* Load or generate the signing key pair */
-    if (crypto_load_keypair(opts.alg, opts.sk_path, opts.pk_path, &priv, &pub) != 0) {
-        fprintf(stderr, "Key init failed\n");
-        goto cleanup;
+    if (crypto_is_hybrid_alg(opts.alg)) {
+        if (hybrid_crypto_load_keypair((hybrid_alg)opts.alg, opts.sk_path,
+                                       opts.pk_path, privs, pubs) != 0) {
+            fprintf(stderr, "Key init failed\n");
+            goto cleanup;
+        }
+    } else {
+        if (crypto_load_keypair((crypto_alg)opts.alg, opts.sk_path, opts.pk_path,
+                                &privs[0], &pubs[0]) != 0) {
+            fprintf(stderr, "Key init failed\n");
+            goto cleanup;
+        }
     }
 
     /* Load or generate AES key and IV */
@@ -56,14 +67,23 @@ int main(int argc, char **argv)
     }
 
     /* Sign the input */
-    size_t sig_len = CRYPTO_MAX_SIG_SIZE; /* large enough */
-    sig = malloc(sig_len);
-    if (!sig) {
+    size_t sig_lens[2] = {0};
+    sigs = malloc(sizeof(uint8_t[2][CRYPTO_MAX_SIG_SIZE]));
+    if (!sigs) {
         goto cleanup;
     }
-    if (crypto_sign(opts.alg, &priv, buf, fsize, sig, &sig_len) != 0) {
-        fprintf(stderr, "Signing failed\n");
-        goto cleanup;
+    if (crypto_is_hybrid_alg(opts.alg)) {
+        if (hybrid_crypto_sign((hybrid_alg)opts.alg, privs, buf, fsize,
+                               sigs, sig_lens) != 0) {
+            fprintf(stderr, "Signing failed\n");
+            goto cleanup;
+        }
+    } else {
+        if (crypto_sign((crypto_alg)opts.alg, &privs[0], buf, fsize,
+                        sigs[0], &sig_lens[0]) != 0) {
+            fprintf(stderr, "Signing failed\n");
+            goto cleanup;
+        }
     }
 
     /* Encrypt the input */
@@ -80,9 +100,9 @@ int main(int argc, char **argv)
     }
 
     /* Write everything to the requested output */
-    if (write_outputs(opts.outfile, include_keys, &priv, &pub,
+    if (write_outputs(opts.outfile, include_keys, opts.alg, privs, pubs,
                       aes_key, opts.aes_bits / 8,
-                      iv, sig, sig_len, enc, enc_len) != 0) {
+                      iv, sigs, sig_lens, enc, enc_len) != 0) {
         fprintf(stderr, "Write failed\n");
         goto cleanup;
     }
@@ -91,10 +111,12 @@ int main(int argc, char **argv)
 
 cleanup:
     free(buf);
-    free(sig);
+    free(sigs);
     free(enc);
-    crypto_free_key(&priv);
-    crypto_free_key(&pub);
+    crypto_free_key(&privs[0]);
+    crypto_free_key(&privs[1]);
+    crypto_free_key(&pubs[0]);
+    crypto_free_key(&pubs[1]);
     return ret;
 }
 

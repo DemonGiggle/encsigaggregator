@@ -4,16 +4,6 @@
 #include <mbedtls/entropy.h>
 #include <mbedtls/lms.h>
 
-/**
- * struct lms_pair - container for an LMS private/public key pair
- * @priv: private key
- * @pub: corresponding public key
- */
-typedef struct {
-    mbedtls_lms_private_t priv;
-    mbedtls_lms_public_t pub;
-} lms_pair;
-
 static int rng_callback(void *ctx, unsigned char *out, size_t len) {
     return mbedtls_ctr_drbg_random((mbedtls_ctr_drbg_context *)ctx, out, len);
 }
@@ -23,31 +13,36 @@ int lms_keygen(mbedtls_ctr_drbg_context *drbg,
     if (!drbg || !out_priv || !out_pub) {
         return -1;
     }
-    lms_pair *pair = calloc(1, sizeof(*pair));
-    if (!pair) {
+    mbedtls_lms_private_t *pr = calloc(1, sizeof(*pr));
+    mbedtls_lms_public_t *pu  = calloc(1, sizeof(*pu));
+    if (!pr || !pu) {
+        free(pr);
+        free(pu);
         return -1;
     }
-    mbedtls_lms_private_init(&pair->priv);
-    mbedtls_lms_public_init(&pair->pub);
+    mbedtls_lms_private_init(pr);
+    mbedtls_lms_public_init(pu);
     unsigned char seed[CRYPTO_LMS_SEED_SIZE];
     if (mbedtls_ctr_drbg_random(drbg, seed, sizeof(seed)) != 0 ||
-        mbedtls_lms_generate_private_key(&pair->priv,
-                                         MBEDTLS_LMS_SHA256_M32_H10,
+        mbedtls_lms_generate_private_key(pr, MBEDTLS_LMS_SHA256_M32_H10,
                                          MBEDTLS_LMOTS_SHA256_N32_W8,
                                          rng_callback, drbg,
                                          seed, sizeof(seed)) != 0 ||
-        mbedtls_lms_calculate_public_key(&pair->pub, &pair->priv) != 0) {
-        mbedtls_lms_private_free(&pair->priv);
-        mbedtls_lms_public_free(&pair->pub);
-        free(pair);
+        mbedtls_lms_calculate_public_key(pu, pr) != 0) {
+        mbedtls_lms_private_free(pr);
+        mbedtls_lms_public_free(pu);
+        free(pr);
+        free(pu);
         return -1;
     }
     out_priv->alg     = CRYPTO_ALG_LMS;
     out_pub->alg      = CRYPTO_ALG_LMS;
-    out_priv->key     = pair;
-    out_pub->key      = pair;
-    out_priv->key_len = sizeof(*pair);
-    out_pub->key_len  = sizeof(*pair);
+    out_priv->type    = CRYPTO_KEY_TYPE_PRIVATE;
+    out_pub->type     = CRYPTO_KEY_TYPE_PUBLIC;
+    out_priv->key     = pr;
+    out_pub->key      = pu;
+    out_priv->key_len = sizeof(*pr);
+    out_pub->key_len  = sizeof(*pu);
     return 0;
 }
 
@@ -75,9 +70,9 @@ int lms_sign(mbedtls_ctr_drbg_context *drbg, const crypto_key *priv,
         priv->alg != CRYPTO_ALG_LMS) {
         return -1;
     }
-    lms_pair *pair = priv->key;
+    mbedtls_lms_private_t *pr = priv->key;
     size_t olen = 0;
-    if (mbedtls_lms_sign(&pair->priv, rng_callback, drbg,
+    if (mbedtls_lms_sign(pr, rng_callback, drbg,
                           msg, msg_len, sig, *sig_len, &olen) != 0) {
         return -1;
     }
@@ -90,8 +85,8 @@ int lms_verify(const crypto_key *pub, const uint8_t *msg, size_t msg_len,
     if (!pub || !msg || !sig || pub->alg != CRYPTO_ALG_LMS) {
         return -1;
     }
-    lms_pair *pair = pub->key;
-    if (mbedtls_lms_verify(&pair->pub, msg, msg_len, sig, sig_len) != 0) {
+    mbedtls_lms_public_t *pu = pub->key;
+    if (mbedtls_lms_verify(pu, msg, msg_len, sig, sig_len) != 0) {
         return -1;
     }
     return 0;
@@ -102,8 +97,8 @@ int lms_export_keypair(const crypto_key *priv, const crypto_key *pub,
     if (!priv || !pub || !out_priv || !out_pub) {
         return -1;
     }
-    const lms_pair *pair = priv->key;
-    const mbedtls_lms_private_t *pr = &pair->priv;
+    const mbedtls_lms_private_t *pr = priv->key;
+    const mbedtls_lms_public_t *pu = pub->key;
     size_t count = 1u << MBEDTLS_LMS_H_TREE_HEIGHT(
         pr->MBEDTLS_PRIVATE(params).MBEDTLS_PRIVATE(type));
     size_t priv_size =
@@ -134,6 +129,7 @@ int lms_export_keypair(const crypto_key *priv, const crypto_key *pub,
     out_priv->key     = pbuf;
     out_priv->key_len = priv_size;
     out_priv->alg     = CRYPTO_ALG_LMS;
+    out_priv->type    = CRYPTO_KEY_TYPE_PRIVATE;
 
     size_t pub_len = MBEDTLS_LMS_PUBLIC_KEY_LEN(
         pr->MBEDTLS_PRIVATE(params).MBEDTLS_PRIVATE(type));
@@ -143,7 +139,7 @@ int lms_export_keypair(const crypto_key *priv, const crypto_key *pub,
         return -1;
     }
     size_t olen = 0;
-    if (mbedtls_lms_export_public_key(&pair->pub, pub_buf, pub_len,
+    if (mbedtls_lms_export_public_key(pu, pub_buf, pub_len,
                                       &olen) != 0 || olen != pub_len) {
         free(pbuf);
         free(pub_buf);
@@ -152,6 +148,7 @@ int lms_export_keypair(const crypto_key *priv, const crypto_key *pub,
     out_pub->key     = pub_buf;
     out_pub->key_len = pub_len;
     out_pub->alg     = CRYPTO_ALG_LMS;
+    out_pub->type    = CRYPTO_KEY_TYPE_PUBLIC;
     return 0;
 }
 
@@ -159,10 +156,12 @@ void lms_free_key(crypto_key *key) {
     if (!key || key->alg != CRYPTO_ALG_LMS || !key->key) {
         return;
     }
-    lms_pair *pair = key->key;
-    mbedtls_lms_private_free(&pair->priv);
-    mbedtls_lms_public_free(&pair->pub);
-    free(pair);
+    if (key->type == CRYPTO_KEY_TYPE_PRIVATE) {
+        mbedtls_lms_private_free((mbedtls_lms_private_t *)key->key);
+    } else if (key->type == CRYPTO_KEY_TYPE_PUBLIC) {
+        mbedtls_lms_public_free((mbedtls_lms_public_t *)key->key);
+    }
+    free(key->key);
     key->key     = NULL;
     key->key_len = 0;
 }

@@ -11,8 +11,10 @@ void cli_usage(const char *prog)
             prog);
     fprintf(stderr, "  -a <alg>            signing algorithm: rsa,lms,mldsa87,rsa-lms,rsa-mldsa87,lms-mldsa87\n");
     fprintf(stderr, "  -b <bits>           AES key bits: 128,192,256\n");
-    fprintf(stderr, "  --pk-path <file>    public key file\n");
-    fprintf(stderr, "  --sk-path <file>    private key file\n");
+    fprintf(stderr,
+            "  --pk-path <file[,file]>    public key file(s)\n");
+    fprintf(stderr,
+            "  --sk-path <file[,file]>    private key file(s)\n");
     fprintf(stderr, "  --aes-key-path <f>  AES key file\n");
     fprintf(stderr, "  --aes-iv <f>        AES IV file (optional)\n");
     fprintf(stderr, "  -i <file>           input file\n");

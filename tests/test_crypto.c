@@ -6,6 +6,10 @@
 #include <cmocka.h>
 #include <string.h>
 #include <stdlib.h>
+#include <limits.h>
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
 
 #include <mbedtls/lms.h>
 #include <mbedtls/private_access.h>
@@ -13,6 +17,16 @@
 #include <stdio.h>
 #include <unistd.h>
 #include "api.h"
+
+/* Write key material to a temporary file in place */
+static void write_key_to_temp_file(const crypto_key *key, char path[]) {
+    int fd = mkstemp(path);
+    assert_true(fd != -1);
+    FILE *f = fdopen(fd, "wb");
+    assert_non_null(f);
+    assert_int_equal(fwrite(key->key, 1, key->key_len, f), key->key_len);
+    fclose(f);
+}
 
 /* Compute SHA-384 of 'abc' and compare against known vector */
 static void test_sha384(void **state) {
@@ -185,7 +199,6 @@ static void test_rsa_sign_verify(void **state) {
                                    msg, sizeof(msg) - 1,
                                    sig, sig_len), 0);
     crypto_free_key(&priv);
-    pub.key = NULL;
     crypto_free_key(&pub);
 }
 
@@ -209,7 +222,6 @@ static void test_lms_sign_verify(void **state) {
                                    msg, sizeof(msg) - 1,
                                    sig, sig_len), 0);
     crypto_free_key(&priv);
-    pub.key = NULL;
     crypto_free_key(&pub);
 }
 
@@ -219,13 +231,8 @@ static void test_lms_q_next_usable_key(void **state) {
     crypto_key priv = {0}, pub = {0};
     assert_int_equal(crypto_keygen(CRYPTO_ALG_LMS, &priv, &pub), 0);
 
-    /* Access the internal LMS pair to inspect q_next_usable_key. */
-    typedef struct {
-        mbedtls_lms_private_t priv;
-        mbedtls_lms_public_t pub;
-    } lms_pair;
-    lms_pair *pair = priv.key;
-    uint32_t before = pair->priv.MBEDTLS_PRIVATE(q_next_usable_key);
+    mbedtls_lms_private_t *pr = priv.key;
+    uint32_t before = pr->MBEDTLS_PRIVATE(q_next_usable_key);
 
     const uint8_t msg[] = "test message";
     uint8_t sig[MBEDTLS_LMS_SIG_LEN(MBEDTLS_LMS_SHA256_M32_H10,
@@ -235,36 +242,35 @@ static void test_lms_q_next_usable_key(void **state) {
                                  msg, sizeof(msg) - 1,
                                  sig, &sig_len), 0);
 
-    uint32_t after = pair->priv.MBEDTLS_PRIVATE(q_next_usable_key);
+    uint32_t after = pr->MBEDTLS_PRIVATE(q_next_usable_key);
     assert_int_equal(after, before + 1);
 
-    crypto_key priv_ser = {0}, pub_ser = {0};
+    crypto_key priv_blob = {0}, pub_blob = {0};
     assert_int_equal(crypto_export_keypair(CRYPTO_ALG_LMS, &priv, &pub,
-                                          &priv_ser, &pub_ser), 0);
+                                          &priv_blob, &pub_blob), 0);
 
     char path[] = "/tmp/lmsprivXXXXXX";
     int fd = mkstemp(path);
     assert_true(fd != -1);
-    assert_int_equal(write(fd, priv_ser.key, priv_ser.key_len),
-                     (ssize_t)priv_ser.key_len);
+    assert_int_equal(write(fd, priv_blob.key, priv_blob.key_len),
+                     (ssize_t)priv_blob.key_len);
     close(fd);
 
     uint8_t *buf = NULL;
     size_t len = 0;
     assert_int_equal(read_file(path, &buf, &len), 0);
-    assert_int_equal(len, priv_ser.key_len);
+    assert_int_equal(len, priv_blob.key_len);
 
-    size_t params_size = sizeof(pair->priv.MBEDTLS_PRIVATE(params));
+    size_t params_size = sizeof(pr->MBEDTLS_PRIVATE(params));
     uint32_t q_loaded = 0;
     memcpy(&q_loaded, buf + params_size, sizeof(q_loaded));
     assert_int_equal(q_loaded, after);
 
     free(buf);
     unlink(path);
-    free(priv_ser.key);
-    free(pub_ser.key);
+    free(priv_blob.key);
+    free(pub_blob.key);
     crypto_free_key(&priv);
-    pub.key = NULL;
     crypto_free_key(&pub);
 }
 
@@ -314,7 +320,6 @@ static void test_rsa_lms_sign_verify(void **state) {
                                    msg, sizeof(msg) - 1,
                                    sig, sig_len), 0);
     crypto_free_key(&priv);
-    pub.key = NULL;
     crypto_free_key(&pub);
 }
 
@@ -344,7 +349,6 @@ static void test_rsa_mldsa_sign_verify(void **state) {
                                    msg, sizeof(msg) - 1,
                                    sig, sig_len), 0);
     crypto_free_key(&priv);
-    pub.key = NULL;
     crypto_free_key(&pub);
 }
 
@@ -374,8 +378,65 @@ static void test_lms_mldsa_sign_verify(void **state) {
                                    msg, sizeof(msg) - 1,
                                    sig, sig_len), 0);
     crypto_free_key(&priv);
-    pub.key = NULL;
     crypto_free_key(&pub);
+}
+
+/* Load a hybrid RSA+ML-DSA key pair from comma-separated files */
+static void test_hybrid_load_keypair(void **state) {
+    (void)state;
+
+    /* Generate a hybrid RSA+ML-DSA key pair and export its components */
+    crypto_key priv = {0}, pub = {0};
+    assert_int_equal(crypto_keygen(CRYPTO_ALG_RSA4096_MLDSA87, &priv, &pub), 0);
+    crypto_key priv_parts[2] = {{0}};
+    crypto_key pub_parts[2] = {{0}};
+    assert_int_equal(crypto_hybrid_export_keypairs(CRYPTO_ALG_RSA4096_MLDSA87,
+                                                  &priv, &pub,
+                                                  priv_parts, pub_parts), 0);
+
+    /* Write each component to a temporary file */
+    char priv0_path[] = "/tmp/priv0XXXXXX";
+    write_key_to_temp_file(&priv_parts[0], priv0_path);
+    char priv1_path[] = "/tmp/priv1XXXXXX";
+    write_key_to_temp_file(&priv_parts[1], priv1_path);
+    char pub0_path[] = "/tmp/pub0XXXXXX";
+    write_key_to_temp_file(&pub_parts[0], pub0_path);
+    char pub1_path[] = "/tmp/pub1XXXXXX";
+    write_key_to_temp_file(&pub_parts[1], pub1_path);
+
+    /* Load the hybrid key pair from comma-separated file paths */
+    char priv_paths[2 * PATH_MAX];
+    char pub_paths[2 * PATH_MAX];
+    snprintf(priv_paths, sizeof(priv_paths), "%s,%s", priv0_path, priv1_path);
+    snprintf(pub_paths, sizeof(pub_paths), "%s,%s", pub0_path, pub1_path);
+    crypto_key priv2 = {0}, pub2 = {0};
+    assert_int_equal(crypto_load_keypair(CRYPTO_ALG_RSA4096_MLDSA87,
+                                         priv_paths, pub_paths,
+                                         &priv2, &pub2), 0);
+
+    /* Ensure a signing roundtrip succeeds with the reloaded keys */
+    const uint8_t msg[] = "roundtrip";
+    uint8_t sig[CRYPTO_MAX_SIG_SIZE];
+    size_t sig_len = sizeof(sig);
+    assert_int_equal(crypto_sign(CRYPTO_ALG_RSA4096_MLDSA87, &priv2,
+                                 msg, sizeof(msg) - 1, sig, &sig_len), 0);
+    assert_int_equal(crypto_verify(CRYPTO_ALG_RSA4096_MLDSA87, &pub2,
+                                   msg, sizeof(msg) - 1, sig, sig_len), 0);
+
+    /* Clean up temporary files and key material */
+    unlink(priv0_path);
+    unlink(priv1_path);
+    unlink(pub0_path);
+    unlink(pub1_path);
+
+    crypto_free_key(&priv);
+    crypto_free_key(&priv2);
+    crypto_free_key(&pub);
+    crypto_free_key(&pub2);
+    for (int i = 0; i < 2; i++) {
+        free(priv_parts[i].key);
+        free(pub_parts[i].key);
+    }
 }
 
 static void outputs_roundtrip(crypto_alg alg) {
@@ -420,16 +481,16 @@ static void outputs_roundtrip(crypto_alg alg) {
     free(tmp);
 
     char path[64];
-    crypto_key priv_ser[2] = {{0}};
-    crypto_key pub_ser[2] = {{0}};
+    crypto_key priv_parts[2] = {{0}};
+    crypto_key pub_parts[2] = {{0}};
     size_t key_count = 1;
     if (crypto_is_hybrid_alg(alg)) {
         assert_int_equal(crypto_hybrid_export_keypairs(alg, &priv, &pub,
-                                                      priv_ser, pub_ser), 0);
+                                                      priv_parts, pub_parts), 0);
         key_count = 2;
     } else {
         assert_int_equal(crypto_export_keypair(alg, &priv, &pub,
-                                              &priv_ser[0], &pub_ser[0]), 0);
+                                              &priv_parts[0], &pub_parts[0]), 0);
     }
 
     struct { char name[8]; const uint8_t *data; size_t len; } comps[9];
@@ -444,14 +505,14 @@ static void outputs_roundtrip(crypto_alg alg) {
     comp_idx++;
     for (size_t i = 0; i < key_count; i++) {
         sprintf(comps[comp_idx].name, "sk%zu", i);
-        comps[comp_idx].data = priv_ser[i].key;
-        comps[comp_idx].len  = priv_ser[i].key_len;
+        comps[comp_idx].data = priv_parts[i].key;
+        comps[comp_idx].len  = priv_parts[i].key_len;
         comp_idx++;
     }
     for (size_t i = 0; i < key_count; i++) {
         sprintf(comps[comp_idx].name, "pk%zu", i);
-        comps[comp_idx].data = pub_ser[i].key;
-        comps[comp_idx].len  = pub_ser[i].key_len;
+        comps[comp_idx].data = pub_parts[i].key;
+        comps[comp_idx].len  = pub_parts[i].key_len;
         comp_idx++;
     }
     if (key_count == 2) {
@@ -496,13 +557,10 @@ static void outputs_roundtrip(crypto_alg alg) {
     free(sig);
     free(enc);
     for (size_t i = 0; i < key_count; i++) {
-        free(priv_ser[i].key);
-        free(pub_ser[i].key);
+        free(priv_parts[i].key);
+        free(pub_parts[i].key);
     }
-    void *shared = (priv.key == pub.key) ? priv.key : NULL;
     crypto_free_key(&priv);
-    if (shared)
-        pub.key = NULL;
     crypto_free_key(&pub);
 }
 
@@ -596,7 +654,6 @@ static void test_outputs_signature_only(void **state) {
     free(sig);
     free(enc);
     crypto_free_key(&priv);
-    pub.key = NULL;
     crypto_free_key(&pub);
 }
 
@@ -680,6 +737,7 @@ const struct CMUnitTest crypto_tests[] = {
     cmocka_unit_test(test_rsa_lms_sign_verify),
     cmocka_unit_test(test_rsa_mldsa_sign_verify),
     cmocka_unit_test(test_lms_mldsa_sign_verify),
+    cmocka_unit_test(test_hybrid_load_keypair),
     cmocka_unit_test(test_rsa_outputs),
     cmocka_unit_test(test_lms_outputs),
     cmocka_unit_test(test_mldsa_outputs),

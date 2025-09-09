@@ -21,6 +21,8 @@ int mldsa_keygen(crypto_key *out_priv, crypto_key *out_pub) {
     }
     out_pub->alg      = CRYPTO_ALG_MLDSA87;
     out_priv->alg     = CRYPTO_ALG_MLDSA87;
+    out_pub->type     = CRYPTO_KEY_TYPE_PUBLIC;
+    out_priv->type    = CRYPTO_KEY_TYPE_PRIVATE;
     out_pub->key      = pk;
     out_pub->key_len  = PQCLEAN_MLDSA87_CLEAN_CRYPTO_PUBLICKEYBYTES;
     out_priv->key     = sk;
@@ -48,6 +50,8 @@ int mldsa_load_keypair(const char *priv_path, const char *pub_path,
     }
     out_priv->alg     = CRYPTO_ALG_MLDSA87;
     out_pub->alg      = CRYPTO_ALG_MLDSA87;
+    out_priv->type    = CRYPTO_KEY_TYPE_PRIVATE;
+    out_pub->type     = CRYPTO_KEY_TYPE_PUBLIC;
     out_priv->key     = priv_buf;
     out_priv->key_len = priv_len;
     out_pub->key      = pub_buf;
@@ -100,8 +104,10 @@ int mldsa_export_keypair(const crypto_key *priv, const crypto_key *pub,
     }
     memcpy(out_priv->key, priv->key, priv->key_len);
     memcpy(out_pub->key, pub->key, pub->key_len);
-    out_priv->alg = CRYPTO_ALG_MLDSA87;
-    out_pub->alg  = CRYPTO_ALG_MLDSA87;
+    out_priv->alg  = CRYPTO_ALG_MLDSA87;
+    out_pub->alg   = CRYPTO_ALG_MLDSA87;
+    out_priv->type = CRYPTO_KEY_TYPE_PRIVATE;
+    out_pub->type  = CRYPTO_KEY_TYPE_PUBLIC;
     return 0;
 }
 

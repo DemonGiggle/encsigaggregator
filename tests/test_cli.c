@@ -154,15 +154,15 @@ void test_tool_gen_aes_when_keys_provided(void **state) {
     (void)state;
     crypto_key priv = {0}, pub = {0};
     assert_int_equal(crypto_keygen(CRYPTO_ALG_RSA4096, &priv, &pub), 0);
-    crypto_key priv_ser = {0}, pub_ser = {0};
-    assert_int_equal(crypto_export_keypair(CRYPTO_ALG_RSA4096, &priv, &pub, &priv_ser, &pub_ser), 0);
+    crypto_key priv_blob = {0}, pub_blob = {0};
+    assert_int_equal(crypto_export_keypair(CRYPTO_ALG_RSA4096, &priv, &pub, &priv_blob, &pub_blob), 0);
 
     char sk_path[] = "/tmp/skXXXXXX";
     int skfd = mkstemp(sk_path);
     assert_true(skfd != -1);
     FILE *f = fdopen(skfd, "wb");
     assert_non_null(f);
-    assert_int_equal(fwrite(priv_ser.key, 1, priv_ser.key_len, f), priv_ser.key_len);
+    assert_int_equal(fwrite(priv_blob.key, 1, priv_blob.key_len, f), priv_blob.key_len);
     fclose(f);
 
     char pk_path[] = "/tmp/pkXXXXXX";
@@ -170,7 +170,7 @@ void test_tool_gen_aes_when_keys_provided(void **state) {
     assert_true(pkfd != -1);
     f = fdopen(pkfd, "wb");
     assert_non_null(f);
-    assert_int_equal(fwrite(pub_ser.key, 1, pub_ser.key_len, f), pub_ser.key_len);
+    assert_int_equal(fwrite(pub_blob.key, 1, pub_blob.key_len, f), pub_blob.key_len);
     fclose(f);
 
     char in_path[] = "/tmp/inXXXXXX";
@@ -204,12 +204,9 @@ void test_tool_gen_aes_when_keys_provided(void **state) {
     unlink(in_path);
     unlink(pk_path);
     unlink(sk_path);
-    free(priv_ser.key);
-    free(pub_ser.key);
-    void *shared = (priv.key == pub.key) ? priv.key : NULL;
+    free(priv_blob.key);
+    free(pub_blob.key);
     crypto_free_key(&priv);
-    if (shared)
-        pub.key = NULL;
     crypto_free_key(&pub);
 }
 

@@ -93,7 +93,8 @@ cleanup:
     free(buf);
     free(sig);
     free(enc);
-    crypto_free_key(&priv); /* pub shares context */
+    crypto_free_key(&priv);
+    crypto_free_key(&pub);
     return ret;
 }
 

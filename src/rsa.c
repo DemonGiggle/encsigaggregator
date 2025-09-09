@@ -17,27 +17,45 @@ int rsa_keygen(mbedtls_ctr_drbg_context *drbg, crypto_key *out_priv, crypto_key 
     if (!drbg || !out_priv || !out_pub) {
         return -1;
     }
-    mbedtls_pk_context *pk = calloc(1, sizeof(*pk));
-    if (!pk) {
+    mbedtls_pk_context *priv = calloc(1, sizeof(*priv));
+    mbedtls_pk_context *pub  = calloc(1, sizeof(*pub));
+    if (!priv || !pub) {
+        free(priv);
+        free(pub);
         return -1;
     }
-    mbedtls_pk_init(pk);
-    if (mbedtls_pk_setup(pk, mbedtls_pk_info_from_type(MBEDTLS_PK_RSA)) != 0) {
-        free(pk);
+    mbedtls_pk_init(priv);
+    mbedtls_pk_init(pub);
+    if (mbedtls_pk_setup(priv, mbedtls_pk_info_from_type(MBEDTLS_PK_RSA)) != 0) {
+        free(priv);
+        free(pub);
         return -1;
     }
-    if (mbedtls_rsa_gen_key(mbedtls_pk_rsa(*pk), rng_callback, drbg,
+    if (mbedtls_rsa_gen_key(mbedtls_pk_rsa(*priv), rng_callback, drbg,
                             CRYPTO_RSA_BITS, CRYPTO_RSA_EXPONENT) != 0) {
-        mbedtls_pk_free(pk);
-        free(pk);
+        mbedtls_pk_free(priv);
+        free(priv);
+        free(pub);
+        return -1;
+    }
+    unsigned char buf[RSA_DER_MAX_LEN];
+    int len = mbedtls_pk_write_pubkey_der(priv, buf, sizeof(buf));
+    if (len <= 0 ||
+        mbedtls_pk_parse_public_key(pub, buf + sizeof(buf) - len, len) != 0) {
+        mbedtls_pk_free(priv);
+        mbedtls_pk_free(pub);
+        free(priv);
+        free(pub);
         return -1;
     }
     out_priv->alg     = CRYPTO_ALG_RSA4096;
     out_pub->alg      = CRYPTO_ALG_RSA4096;
-    out_priv->key     = pk;
-    out_pub->key      = pk;
-    out_priv->key_len = sizeof(*pk);
-    out_pub->key_len  = sizeof(*pk);
+    out_priv->type    = CRYPTO_KEY_TYPE_PRIVATE;
+    out_pub->type     = CRYPTO_KEY_TYPE_PUBLIC;
+    out_priv->key     = priv;
+    out_pub->key      = pub;
+    out_priv->key_len = sizeof(*priv);
+    out_pub->key_len  = sizeof(*pub);
     return 0;
 }
 
@@ -53,17 +71,23 @@ int rsa_load_keypair(const char *priv_path, const char *pub_path,
         free(pub_buf);
         return -1;
     }
-    mbedtls_pk_context *pk = calloc(1, sizeof(*pk));
-    if (!pk) {
+    mbedtls_pk_context *priv = calloc(1, sizeof(*priv));
+    mbedtls_pk_context *pub  = calloc(1, sizeof(*pub));
+    if (!priv || !pub) {
+        free(priv);
+        free(pub);
         free(priv_buf);
         free(pub_buf);
         return -1;
     }
-    mbedtls_pk_init(pk);
-    if (mbedtls_pk_parse_key(pk, priv_buf, priv_len, NULL, 0, NULL, NULL) != 0 ||
-        mbedtls_pk_parse_public_key(pk, pub_buf, pub_len) != 0) {
-        mbedtls_pk_free(pk);
-        free(pk);
+    mbedtls_pk_init(priv);
+    mbedtls_pk_init(pub);
+    if (mbedtls_pk_parse_key(priv, priv_buf, priv_len, NULL, 0, NULL, NULL) != 0 ||
+        mbedtls_pk_parse_public_key(pub, pub_buf, pub_len) != 0) {
+        mbedtls_pk_free(priv);
+        mbedtls_pk_free(pub);
+        free(priv);
+        free(pub);
         free(priv_buf);
         free(pub_buf);
         return -1;
@@ -72,10 +96,12 @@ int rsa_load_keypair(const char *priv_path, const char *pub_path,
     free(pub_buf);
     out_priv->alg     = CRYPTO_ALG_RSA4096;
     out_pub->alg      = CRYPTO_ALG_RSA4096;
-    out_priv->key     = pk;
-    out_pub->key      = pk;
-    out_priv->key_len = sizeof(*pk);
-    out_pub->key_len  = sizeof(*pk);
+    out_priv->type    = CRYPTO_KEY_TYPE_PRIVATE;
+    out_pub->type     = CRYPTO_KEY_TYPE_PUBLIC;
+    out_priv->key     = priv;
+    out_pub->key      = pub;
+    out_priv->key_len = sizeof(*priv);
+    out_pub->key_len  = sizeof(*pub);
     return 0;
 }
 
@@ -135,6 +161,7 @@ int rsa_export_keypair(const crypto_key *priv, const crypto_key *pub,
     memcpy(out_priv->key, buf + sizeof(buf) - len, len);
     out_priv->key_len = len;
     out_priv->alg     = CRYPTO_ALG_RSA4096;
+    out_priv->type    = CRYPTO_KEY_TYPE_PRIVATE;
 
     len = mbedtls_pk_write_pubkey_der(pk, buf, sizeof(buf));
     if (len <= 0) {
@@ -149,6 +176,7 @@ int rsa_export_keypair(const crypto_key *priv, const crypto_key *pub,
     memcpy(out_pub->key, buf + sizeof(buf) - len, len);
     out_pub->key_len = len;
     out_pub->alg     = CRYPTO_ALG_RSA4096;
+    out_pub->type    = CRYPTO_KEY_TYPE_PUBLIC;
     return 0;
 }
 

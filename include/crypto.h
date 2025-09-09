@@ -53,13 +53,25 @@ typedef enum {
 } crypto_alg;
 
 /**
+ * enum crypto_key_type - distinguishes public and private keys
+ * @CRYPTO_KEY_TYPE_PRIVATE: private key
+ * @CRYPTO_KEY_TYPE_PUBLIC: public key
+ */
+typedef enum {
+    CRYPTO_KEY_TYPE_PRIVATE,
+    CRYPTO_KEY_TYPE_PUBLIC,
+} crypto_key_type;
+
+/**
  * struct crypto_key - generic wrapper for algorithm-specific key material
  * @alg:     algorithm this key is for
+ * @type:    whether the key is private or public
  * @key:     pointer to algorithm-specific key data
  * @key_len: length of key data in bytes
  */
 typedef struct {
     crypto_alg alg;
+    crypto_key_type type;
     void *key;
     size_t key_len;
 } crypto_key;

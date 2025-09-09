@@ -149,7 +149,7 @@ int write_outputs(const char *out_path, int include_keys,
         int ret = 0;
         crypto_key privs[2] = {{0}};
         crypto_key pubs[2] = {{0}};
-        crypto_key priv_ser = {0}, pub_ser = {0};
+        crypto_key priv_blob = {0}, pub_blob = {0};
 
         if (write_component("aes_iv", iv, CRYPTO_AES_IV_SIZE) != 0) {
             goto error;
@@ -177,14 +177,14 @@ int write_outputs(const char *out_path, int include_keys,
                 goto error;
             }
         } else {
-            if (crypto_export_keypair(priv->alg, priv, pub, &priv_ser,
-                                      &pub_ser) != 0) {
+            if (crypto_export_keypair(priv->alg, priv, pub, &priv_blob,
+                                      &pub_blob) != 0) {
                 goto error;
             }
-            if (write_component("sk0", priv_ser.key, priv_ser.key_len) != 0) {
+            if (write_component("sk0", priv_blob.key, priv_blob.key_len) != 0) {
                 goto error;
             }
-            if (write_component("pk0", pub_ser.key, pub_ser.key_len) != 0) {
+            if (write_component("pk0", pub_blob.key, pub_blob.key_len) != 0) {
                 goto error;
             }
         }
@@ -198,8 +198,8 @@ int write_outputs(const char *out_path, int include_keys,
         free(privs[1].key);
         free(pubs[0].key);
         free(pubs[1].key);
-        free(priv_ser.key);
-        free(pub_ser.key);
+        free(priv_blob.key);
+        free(pub_blob.key);
         if (ret != 0) {
             return -1;
         }

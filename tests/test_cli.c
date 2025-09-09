@@ -206,10 +206,7 @@ void test_tool_gen_aes_when_keys_provided(void **state) {
     unlink(sk_path);
     free(priv_blob.key);
     free(pub_blob.key);
-    void *shared = (priv.key == pub.key) ? priv.key : NULL;
     crypto_free_key(&priv);
-    if (shared)
-        pub.key = NULL;
     crypto_free_key(&pub);
 }
 

@@ -199,7 +199,6 @@ static void test_rsa_sign_verify(void **state) {
                                    msg, sizeof(msg) - 1,
                                    sig, sig_len), 0);
     crypto_free_key(&priv);
-    pub.key = NULL;
     crypto_free_key(&pub);
 }
 
@@ -223,7 +222,6 @@ static void test_lms_sign_verify(void **state) {
                                    msg, sizeof(msg) - 1,
                                    sig, sig_len), 0);
     crypto_free_key(&priv);
-    pub.key = NULL;
     crypto_free_key(&pub);
 }
 
@@ -233,13 +231,8 @@ static void test_lms_q_next_usable_key(void **state) {
     crypto_key priv = {0}, pub = {0};
     assert_int_equal(crypto_keygen(CRYPTO_ALG_LMS, &priv, &pub), 0);
 
-    /* Access the internal LMS pair to inspect q_next_usable_key. */
-    typedef struct {
-        mbedtls_lms_private_t priv;
-        mbedtls_lms_public_t pub;
-    } lms_pair;
-    lms_pair *pair = priv.key;
-    uint32_t before = pair->priv.MBEDTLS_PRIVATE(q_next_usable_key);
+    mbedtls_lms_private_t *pr = priv.key;
+    uint32_t before = pr->MBEDTLS_PRIVATE(q_next_usable_key);
 
     const uint8_t msg[] = "test message";
     uint8_t sig[MBEDTLS_LMS_SIG_LEN(MBEDTLS_LMS_SHA256_M32_H10,
@@ -249,7 +242,7 @@ static void test_lms_q_next_usable_key(void **state) {
                                  msg, sizeof(msg) - 1,
                                  sig, &sig_len), 0);
 
-    uint32_t after = pair->priv.MBEDTLS_PRIVATE(q_next_usable_key);
+    uint32_t after = pr->MBEDTLS_PRIVATE(q_next_usable_key);
     assert_int_equal(after, before + 1);
 
     crypto_key priv_blob = {0}, pub_blob = {0};
@@ -268,7 +261,7 @@ static void test_lms_q_next_usable_key(void **state) {
     assert_int_equal(read_file(path, &buf, &len), 0);
     assert_int_equal(len, priv_blob.key_len);
 
-    size_t params_size = sizeof(pair->priv.MBEDTLS_PRIVATE(params));
+    size_t params_size = sizeof(pr->MBEDTLS_PRIVATE(params));
     uint32_t q_loaded = 0;
     memcpy(&q_loaded, buf + params_size, sizeof(q_loaded));
     assert_int_equal(q_loaded, after);
@@ -278,7 +271,6 @@ static void test_lms_q_next_usable_key(void **state) {
     free(priv_blob.key);
     free(pub_blob.key);
     crypto_free_key(&priv);
-    pub.key = NULL;
     crypto_free_key(&pub);
 }
 
@@ -573,11 +565,14 @@ static void outputs_roundtrip(crypto_alg alg) {
         free(priv_parts[i].key);
         free(pub_parts[i].key);
     }
-    void *shared = (priv.key == pub.key) ? priv.key : NULL;
-    crypto_free_key(&priv);
-    if (shared)
+    if (crypto_is_hybrid_alg(alg)) {
+        crypto_free_key(&priv);
         pub.key = NULL;
-    crypto_free_key(&pub);
+        crypto_free_key(&pub);
+    } else {
+        crypto_free_key(&priv);
+        crypto_free_key(&pub);
+    }
 }
 
 static void test_rsa_outputs(void **state) {
@@ -670,7 +665,6 @@ static void test_outputs_signature_only(void **state) {
     free(sig);
     free(enc);
     crypto_free_key(&priv);
-    pub.key = NULL;
     crypto_free_key(&pub);
 }
 

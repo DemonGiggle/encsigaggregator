@@ -320,7 +320,6 @@ static void test_rsa_lms_sign_verify(void **state) {
                                    msg, sizeof(msg) - 1,
                                    sig, sig_len), 0);
     crypto_free_key(&priv);
-    pub.key = NULL;
     crypto_free_key(&pub);
 }
 
@@ -350,7 +349,6 @@ static void test_rsa_mldsa_sign_verify(void **state) {
                                    msg, sizeof(msg) - 1,
                                    sig, sig_len), 0);
     crypto_free_key(&priv);
-    pub.key = NULL;
     crypto_free_key(&pub);
 }
 
@@ -380,7 +378,6 @@ static void test_lms_mldsa_sign_verify(void **state) {
                                    msg, sizeof(msg) - 1,
                                    sig, sig_len), 0);
     crypto_free_key(&priv);
-    pub.key = NULL;
     crypto_free_key(&pub);
 }
 
@@ -434,8 +431,6 @@ static void test_hybrid_load_keypair(void **state) {
 
     crypto_free_key(&priv);
     crypto_free_key(&priv2);
-    pub.key = NULL;
-    pub2.key = NULL;
     crypto_free_key(&pub);
     crypto_free_key(&pub2);
     for (int i = 0; i < 2; i++) {
@@ -565,14 +560,8 @@ static void outputs_roundtrip(crypto_alg alg) {
         free(priv_parts[i].key);
         free(pub_parts[i].key);
     }
-    if (crypto_is_hybrid_alg(alg)) {
-        crypto_free_key(&priv);
-        pub.key = NULL;
-        crypto_free_key(&pub);
-    } else {
-        crypto_free_key(&priv);
-        crypto_free_key(&pub);
-    }
+    crypto_free_key(&priv);
+    crypto_free_key(&pub);
 }
 
 static void test_rsa_outputs(void **state) {

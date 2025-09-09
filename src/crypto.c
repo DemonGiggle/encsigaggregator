@@ -159,6 +159,8 @@ int crypto_keygen(crypto_alg alg, crypto_key *out_priv, crypto_key *out_pub)
         }
         out_priv->alg     = alg;
         out_pub->alg      = alg;
+        out_priv->type    = CRYPTO_KEY_TYPE_PRIVATE;
+        out_pub->type     = CRYPTO_KEY_TYPE_PUBLIC;
         out_priv->key     = pair;
         out_pub->key      = pair;
         out_priv->key_len = sizeof(*pair);
@@ -220,10 +222,12 @@ static int load_hybrid_keypair(crypto_alg alg, const char *priv_path, const char
         return -1;
     }
 
-    out_priv->alg = alg;
-    out_pub->alg  = alg;
-    out_priv->key = pair;
-    out_pub->key  = pair;
+    out_priv->alg  = alg;
+    out_pub->alg   = alg;
+    out_priv->type = CRYPTO_KEY_TYPE_PRIVATE;
+    out_pub->type  = CRYPTO_KEY_TYPE_PUBLIC;
+    out_priv->key  = pair;
+    out_pub->key   = pair;
     out_priv->key_len = sizeof(*pair);
     out_pub->key_len  = sizeof(*pair);
     return 0;
@@ -642,6 +646,11 @@ void crypto_free_key(crypto_key *key)
     } else if (key->alg == CRYPTO_ALG_MLDSA87) {
         mldsa_free_key(key);
     } else if (crypto_is_hybrid_alg(key->alg)) {
+        if (key->type == CRYPTO_KEY_TYPE_PUBLIC) {
+            key->key     = NULL;
+            key->key_len = 0;
+            return;
+        }
         hybrid_pair *pair = key->key;
         crypto_free_key(&pair->first_priv);
         crypto_free_key(&pair->first_pub);

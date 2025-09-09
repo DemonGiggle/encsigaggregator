@@ -149,12 +149,22 @@ int crypto_keygen(crypto_alg alg, crypto_key *out_priv, crypto_key *out_pub)
         }
         if (crypto_keygen(first, &pair->first_priv, &pair->first_pub) != 0 ||
             crypto_keygen(second, &pair->second_priv, &pair->second_pub) != 0) {
+            int first_shared  = pair->first_pub.key == pair->first_priv.key;
+            int second_shared = pair->second_pub.key == pair->second_priv.key;
             crypto_free_key(&pair->first_priv);
-            pair->first_pub.key = NULL;
-            crypto_free_key(&pair->first_pub);
+            if (first_shared) {
+                pair->first_pub.key = NULL;
+                pair->first_pub.key_len = 0;
+            } else {
+                crypto_free_key(&pair->first_pub);
+            }
             crypto_free_key(&pair->second_priv);
-            pair->second_pub.key = NULL;
-            crypto_free_key(&pair->second_pub);
+            if (second_shared) {
+                pair->second_pub.key = NULL;
+                pair->second_pub.key_len = 0;
+            } else {
+                crypto_free_key(&pair->second_pub);
+            }
             free(pair);
             ret = -1;
             goto cleanup;
@@ -214,12 +224,22 @@ static int load_hybrid_keypair(crypto_alg alg, const char *priv_path, const char
     if (crypto_hybrid_get_algs(alg, &first, &second) != 0 ||
         crypto_load_keypair(first, priv0, pub0, &pair->first_priv, &pair->first_pub) != 0 ||
         crypto_load_keypair(second, priv1, pub1, &pair->second_priv, &pair->second_pub) != 0) {
-        pair->first_pub.key = NULL;
+        int first_shared  = pair->first_pub.key == pair->first_priv.key;
+        int second_shared = pair->second_pub.key == pair->second_priv.key;
         crypto_free_key(&pair->first_priv);
-        crypto_free_key(&pair->first_pub);
-        pair->second_pub.key = NULL;
+        if (first_shared) {
+            pair->first_pub.key = NULL;
+            pair->first_pub.key_len = 0;
+        } else {
+            crypto_free_key(&pair->first_pub);
+        }
         crypto_free_key(&pair->second_priv);
-        crypto_free_key(&pair->second_pub);
+        if (second_shared) {
+            pair->second_pub.key = NULL;
+            pair->second_pub.key_len = 0;
+        } else {
+            crypto_free_key(&pair->second_pub);
+        }
         free(pair);
         return -1;
     }
@@ -647,12 +667,22 @@ void crypto_free_key(crypto_key *key)
         mldsa_free_key(key);
     } else if (crypto_is_hybrid_alg(key->alg)) {
         hybrid_pair *pair = key->key;
+        int first_shared  = pair->first_pub.key == pair->first_priv.key;
+        int second_shared = pair->second_pub.key == pair->second_priv.key;
         crypto_free_key(&pair->first_priv);
-        pair->first_pub.key = NULL;
-        crypto_free_key(&pair->first_pub);
+        if (first_shared) {
+            pair->first_pub.key = NULL;
+            pair->first_pub.key_len = 0;
+        } else {
+            crypto_free_key(&pair->first_pub);
+        }
         crypto_free_key(&pair->second_priv);
-        pair->second_pub.key = NULL;
-        crypto_free_key(&pair->second_pub);
+        if (second_shared) {
+            pair->second_pub.key = NULL;
+            pair->second_pub.key_len = 0;
+        } else {
+            crypto_free_key(&pair->second_pub);
+        }
         free(pair);
         key->key     = NULL;
         key->key_len = 0;

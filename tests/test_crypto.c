@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L /* for mkstemp and related functions */
 #include "crypto.h"
+#include "hybrid_crypto.h"
 #include "util.h"
 #include <stdarg.h>
 #include <setjmp.h>
@@ -297,14 +298,15 @@ static void test_mldsa_sign_verify(void **state) {
 /* Verify combined RSA+LMS hybrid signature workflow */
 static void test_rsa_lms_sign_verify(void **state) {
     (void)state;
-    crypto_key priv = {0}, pub = {0};
-    assert_int_equal(crypto_keygen(CRYPTO_ALG_RSA4096_LMS, &priv, &pub), 0);
+    crypto_key privs[2] = {{0}};
+    crypto_key pubs[2] = {{0}};
+    assert_int_equal(hybrid_crypto_keygen(CRYPTO_ALG_RSA4096_LMS, privs, pubs), 0);
     const uint8_t msg[] = "test message";
-    uint8_t sig[CRYPTO_MAX_SIG_SIZE];
-    size_t sig_len = sizeof(sig);
-    assert_int_equal(crypto_sign(CRYPTO_ALG_RSA4096_LMS, &priv,
-                                 msg, sizeof(msg) - 1,
-                                 sig, &sig_len), 0);
+    uint8_t sigs[2][CRYPTO_MAX_SIG_SIZE];
+    size_t sig_lens[2] = {0};
+    assert_int_equal(hybrid_crypto_sign(CRYPTO_ALG_RSA4096_LMS, privs,
+                                        msg, sizeof(msg) - 1,
+                                        sigs, sig_lens), 0);
     size_t len1 = 0;
     size_t len2 = 0;
     crypto_alg first = 0;
@@ -315,70 +317,81 @@ static void test_rsa_lms_sign_verify(void **state) {
     assert_int_equal(second, CRYPTO_ALG_LMS);
     assert_int_equal(crypto_hybrid_get_sig_lens(CRYPTO_ALG_RSA4096_LMS,
                                                 &len1, &len2), 0);
-    assert_int_equal(sig_len, len1 + len2);
-    assert_int_equal(crypto_verify(CRYPTO_ALG_RSA4096_LMS, &pub,
-                                   msg, sizeof(msg) - 1,
-                                   sig, sig_len), 0);
-    crypto_free_key(&priv);
-    crypto_free_key(&pub);
+    assert_int_equal(sig_lens[0], len1);
+    assert_int_equal(sig_lens[1], len2);
+    assert_int_equal(hybrid_crypto_verify(CRYPTO_ALG_RSA4096_LMS, pubs,
+                                          msg, sizeof(msg) - 1,
+                                          sigs, sig_lens), 0);
+    crypto_free_key(&privs[0]);
+    crypto_free_key(&privs[1]);
+    crypto_free_key(&pubs[0]);
+    crypto_free_key(&pubs[1]);
 }
 
 /* Verify combined RSA+ML-DSA hybrid signature workflow */
 static void test_rsa_mldsa_sign_verify(void **state) {
     (void)state;
-    crypto_key priv = {0}, pub = {0};
-    assert_int_equal(crypto_keygen(CRYPTO_ALG_RSA4096_MLDSA87, &priv, &pub), 0);
+    crypto_key privs[2] = {{0}};
+    crypto_key pubs[2] = {{0}};
+    assert_int_equal(hybrid_crypto_keygen(CRYPTO_ALG_RSA4096_MLDSA87, privs, pubs), 0);
     const uint8_t msg[] = "test message";
-    uint8_t sig[CRYPTO_MAX_SIG_SIZE];
-    size_t sig_len = sizeof(sig);
-    assert_int_equal(crypto_sign(CRYPTO_ALG_RSA4096_MLDSA87, &priv,
-                                 msg, sizeof(msg) - 1,
-                                 sig, &sig_len), 0);
-    size_t len1 = 0;
-    size_t len2 = 0;
-    crypto_alg first = 0;
-    crypto_alg second = 0;
+    uint8_t sigs2[2][CRYPTO_MAX_SIG_SIZE];
+    size_t sig_lens2[2] = {0};
+    assert_int_equal(hybrid_crypto_sign(CRYPTO_ALG_RSA4096_MLDSA87, privs,
+                                        msg, sizeof(msg) - 1,
+                                        sigs2, sig_lens2), 0);
+    size_t len1b = 0;
+    size_t len2b = 0;
+    crypto_alg firstb = 0;
+    crypto_alg secondb = 0;
     assert_int_equal(crypto_hybrid_get_algs(CRYPTO_ALG_RSA4096_MLDSA87,
-                                            &first, &second), 0);
-    assert_int_equal(first, CRYPTO_ALG_RSA4096);
-    assert_int_equal(second, CRYPTO_ALG_MLDSA87);
+                                            &firstb, &secondb), 0);
+    assert_int_equal(firstb, CRYPTO_ALG_RSA4096);
+    assert_int_equal(secondb, CRYPTO_ALG_MLDSA87);
     assert_int_equal(crypto_hybrid_get_sig_lens(CRYPTO_ALG_RSA4096_MLDSA87,
-                                                &len1, &len2), 0);
-    assert_int_equal(sig_len, len1 + len2);
-    assert_int_equal(crypto_verify(CRYPTO_ALG_RSA4096_MLDSA87, &pub,
-                                   msg, sizeof(msg) - 1,
-                                   sig, sig_len), 0);
-    crypto_free_key(&priv);
-    crypto_free_key(&pub);
+                                                &len1b, &len2b), 0);
+    assert_int_equal(sig_lens2[0], len1b);
+    assert_int_equal(sig_lens2[1], len2b);
+    assert_int_equal(hybrid_crypto_verify(CRYPTO_ALG_RSA4096_MLDSA87, pubs,
+                                          msg, sizeof(msg) - 1,
+                                          sigs2, sig_lens2), 0);
+    crypto_free_key(&privs[0]);
+    crypto_free_key(&privs[1]);
+    crypto_free_key(&pubs[0]);
+    crypto_free_key(&pubs[1]);
 }
 
 /* Verify combined LMS+ML-DSA hybrid signature workflow */
 static void test_lms_mldsa_sign_verify(void **state) {
     (void)state;
-    crypto_key priv = {0}, pub = {0};
-    assert_int_equal(crypto_keygen(CRYPTO_ALG_LMS_MLDSA87, &priv, &pub), 0);
+    crypto_key privs[2] = {{0}};
+    crypto_key pubs[2] = {{0}};
+    assert_int_equal(hybrid_crypto_keygen(CRYPTO_ALG_LMS_MLDSA87, privs, pubs), 0);
     const uint8_t msg[] = "test message";
-    uint8_t sig[CRYPTO_MAX_SIG_SIZE];
-    size_t sig_len = sizeof(sig);
-    assert_int_equal(crypto_sign(CRYPTO_ALG_LMS_MLDSA87, &priv,
-                                 msg, sizeof(msg) - 1,
-                                 sig, &sig_len), 0);
-    size_t len1 = 0;
-    size_t len2 = 0;
-    crypto_alg first = 0;
-    crypto_alg second = 0;
+    uint8_t sigs3[2][CRYPTO_MAX_SIG_SIZE];
+    size_t sig_lens3[2] = {0};
+    assert_int_equal(hybrid_crypto_sign(CRYPTO_ALG_LMS_MLDSA87, privs,
+                                        msg, sizeof(msg) - 1,
+                                        sigs3, sig_lens3), 0);
+    size_t len1c = 0;
+    size_t len2c = 0;
+    crypto_alg firstc = 0;
+    crypto_alg secondc = 0;
     assert_int_equal(crypto_hybrid_get_algs(CRYPTO_ALG_LMS_MLDSA87,
-                                            &first, &second), 0);
-    assert_int_equal(first, CRYPTO_ALG_LMS);
-    assert_int_equal(second, CRYPTO_ALG_MLDSA87);
+                                            &firstc, &secondc), 0);
+    assert_int_equal(firstc, CRYPTO_ALG_LMS);
+    assert_int_equal(secondc, CRYPTO_ALG_MLDSA87);
     assert_int_equal(crypto_hybrid_get_sig_lens(CRYPTO_ALG_LMS_MLDSA87,
-                                                &len1, &len2), 0);
-    assert_int_equal(sig_len, len1 + len2);
-    assert_int_equal(crypto_verify(CRYPTO_ALG_LMS_MLDSA87, &pub,
-                                   msg, sizeof(msg) - 1,
-                                   sig, sig_len), 0);
-    crypto_free_key(&priv);
-    crypto_free_key(&pub);
+                                                &len1c, &len2c), 0);
+    assert_int_equal(sig_lens3[0], len1c);
+    assert_int_equal(sig_lens3[1], len2c);
+    assert_int_equal(hybrid_crypto_verify(CRYPTO_ALG_LMS_MLDSA87, pubs,
+                                          msg, sizeof(msg) - 1,
+                                          sigs3, sig_lens3), 0);
+    crypto_free_key(&privs[0]);
+    crypto_free_key(&privs[1]);
+    crypto_free_key(&pubs[0]);
+    crypto_free_key(&pubs[1]);
 }
 
 /* Load a hybrid RSA+ML-DSA key pair from comma-separated files */
@@ -386,12 +399,13 @@ static void test_hybrid_load_keypair(void **state) {
     (void)state;
 
     /* Generate a hybrid RSA+ML-DSA key pair and export its components */
-    crypto_key priv = {0}, pub = {0};
-    assert_int_equal(crypto_keygen(CRYPTO_ALG_RSA4096_MLDSA87, &priv, &pub), 0);
+    crypto_key privs[2] = {{0}};
+    crypto_key pubs[2] = {{0}};
+    assert_int_equal(hybrid_crypto_keygen(CRYPTO_ALG_RSA4096_MLDSA87, privs, pubs), 0);
     crypto_key priv_parts[2] = {{0}};
     crypto_key pub_parts[2] = {{0}};
-    assert_int_equal(crypto_hybrid_export_keypairs(CRYPTO_ALG_RSA4096_MLDSA87,
-                                                  &priv, &pub,
+    assert_int_equal(hybrid_crypto_export_keypairs(CRYPTO_ALG_RSA4096_MLDSA87,
+                                                  privs, pubs,
                                                   priv_parts, pub_parts), 0);
 
     /* Write each component to a temporary file */
@@ -409,19 +423,20 @@ static void test_hybrid_load_keypair(void **state) {
     char pub_paths[2 * PATH_MAX];
     snprintf(priv_paths, sizeof(priv_paths), "%s,%s", priv0_path, priv1_path);
     snprintf(pub_paths, sizeof(pub_paths), "%s,%s", pub0_path, pub1_path);
-    crypto_key priv2 = {0}, pub2 = {0};
-    assert_int_equal(crypto_load_keypair(CRYPTO_ALG_RSA4096_MLDSA87,
-                                         priv_paths, pub_paths,
-                                         &priv2, &pub2), 0);
+    crypto_key privs2[2] = {{0}};
+    crypto_key pubs2[2] = {{0}};
+    assert_int_equal(hybrid_crypto_load_keypair(CRYPTO_ALG_RSA4096_MLDSA87,
+                                                priv_paths, pub_paths,
+                                                privs2, pubs2), 0);
 
     /* Ensure a signing roundtrip succeeds with the reloaded keys */
     const uint8_t msg[] = "roundtrip";
-    uint8_t sig[CRYPTO_MAX_SIG_SIZE];
-    size_t sig_len = sizeof(sig);
-    assert_int_equal(crypto_sign(CRYPTO_ALG_RSA4096_MLDSA87, &priv2,
-                                 msg, sizeof(msg) - 1, sig, &sig_len), 0);
-    assert_int_equal(crypto_verify(CRYPTO_ALG_RSA4096_MLDSA87, &pub2,
-                                   msg, sizeof(msg) - 1, sig, sig_len), 0);
+    uint8_t sigs[2][CRYPTO_MAX_SIG_SIZE];
+    size_t sig_lens[2] = {0};
+    assert_int_equal(hybrid_crypto_sign(CRYPTO_ALG_RSA4096_MLDSA87, privs2,
+                                        msg, sizeof(msg) - 1, sigs, sig_lens), 0);
+    assert_int_equal(hybrid_crypto_verify(CRYPTO_ALG_RSA4096_MLDSA87, pubs2,
+                                          msg, sizeof(msg) - 1, sigs, sig_lens), 0);
 
     /* Clean up temporary files and key material */
     unlink(priv0_path);
@@ -429,19 +444,24 @@ static void test_hybrid_load_keypair(void **state) {
     unlink(pub0_path);
     unlink(pub1_path);
 
-    crypto_free_key(&priv);
-    crypto_free_key(&priv2);
-    crypto_free_key(&pub);
-    crypto_free_key(&pub2);
     for (int i = 0; i < 2; i++) {
+        crypto_free_key(&privs[i]);
+        crypto_free_key(&pubs[i]);
+        crypto_free_key(&privs2[i]);
+        crypto_free_key(&pubs2[i]);
         free(priv_parts[i].key);
         free(pub_parts[i].key);
     }
 }
 
-static void outputs_roundtrip(crypto_alg alg) {
-    crypto_key priv = {0}, pub = {0};
-    assert_int_equal(crypto_keygen(alg, &priv, &pub), 0);
+static void outputs_roundtrip(int alg) {
+    crypto_key privs[2] = {{0}};
+    crypto_key pubs[2] = {{0}};
+    if (crypto_is_hybrid_alg(alg)) {
+        assert_int_equal(hybrid_crypto_keygen((hybrid_alg)alg, privs, pubs), 0);
+    } else {
+        assert_int_equal(crypto_keygen((crypto_alg)alg, &privs[0], &pubs[0]), 0);
+    }
 
     uint8_t aes_key[CRYPTO_AES_MAX_KEY_SIZE];
     uint8_t iv[CRYPTO_AES_IV_SIZE];
@@ -449,11 +469,16 @@ static void outputs_roundtrip(crypto_alg alg) {
                                      aes_key, iv), 0);
 
     const uint8_t msg[] = "serialize test";
-    size_t sig_len = CRYPTO_MAX_SIG_SIZE;
-    uint8_t *sig = malloc(sig_len);
-    assert_non_null(sig);
-    assert_int_equal(crypto_sign(alg, &priv, msg, sizeof(msg) - 1,
-                                 sig, &sig_len), 0);
+    uint8_t sigs[2][CRYPTO_MAX_SIG_SIZE];
+    size_t sig_lens[2] = {0};
+    if (crypto_is_hybrid_alg(alg)) {
+        assert_int_equal(hybrid_crypto_sign((hybrid_alg)alg, privs, msg,
+                                           sizeof(msg) - 1, sigs, sig_lens), 0);
+    } else {
+        sig_lens[0] = CRYPTO_MAX_SIG_SIZE;
+        assert_int_equal(crypto_sign((crypto_alg)alg, &privs[0], msg,
+                                     sizeof(msg) - 1, sigs[0], &sig_lens[0]), 0);
+    }
 
     size_t enc_len = sizeof(msg) - 1;
     size_t rem = enc_len % CRYPTO_AES_IV_SIZE;
@@ -469,9 +494,9 @@ static void outputs_roundtrip(crypto_alg alg) {
     assert_true(fd != -1);
     close(fd);
 
-    assert_int_equal(write_outputs(out_path, 1, &priv, &pub,
+    assert_int_equal(write_outputs(out_path, 1, alg, privs, pubs,
                                    aes_key, CRYPTO_AES_KEY_BITS_128 / 8,
-                                   iv, sig, sig_len, enc, enc_len), 0);
+                                   iv, sigs, sig_lens, enc, enc_len), 0);
 
     uint8_t *tmp = NULL;
     size_t len = 0;
@@ -485,11 +510,12 @@ static void outputs_roundtrip(crypto_alg alg) {
     crypto_key pub_parts[2] = {{0}};
     size_t key_count = 1;
     if (crypto_is_hybrid_alg(alg)) {
-        assert_int_equal(crypto_hybrid_export_keypairs(alg, &priv, &pub,
-                                                      priv_parts, pub_parts), 0);
+        assert_int_equal(hybrid_crypto_export_keypairs((hybrid_alg)alg, privs,
+                                                      pubs, priv_parts,
+                                                      pub_parts), 0);
         key_count = 2;
     } else {
-        assert_int_equal(crypto_export_keypair(alg, &priv, &pub,
+        assert_int_equal(crypto_export_keypair((crypto_alg)alg, &privs[0], &pubs[0],
                                               &priv_parts[0], &pub_parts[0]), 0);
     }
 
@@ -516,21 +542,18 @@ static void outputs_roundtrip(crypto_alg alg) {
         comp_idx++;
     }
     if (key_count == 2) {
-        size_t len1 = 0;
-        size_t len2 = 0;
-        assert_int_equal(crypto_hybrid_get_sig_lens(alg, &len1, &len2), 0);
         sprintf(comps[comp_idx].name, "sig0");
-        comps[comp_idx].data = sig;
-        comps[comp_idx].len  = len1;
+        comps[comp_idx].data = sigs[0];
+        comps[comp_idx].len  = sig_lens[0];
         comp_idx++;
         sprintf(comps[comp_idx].name, "sig1");
-        comps[comp_idx].data = sig + len1;
-        comps[comp_idx].len  = len2;
+        comps[comp_idx].data = sigs[1];
+        comps[comp_idx].len  = sig_lens[1];
         comp_idx++;
     } else {
         strcpy(comps[comp_idx].name, "sig0");
-        comps[comp_idx].data = sig;
-        comps[comp_idx].len  = sig_len;
+        comps[comp_idx].data = sigs[0];
+        comps[comp_idx].len  = sig_lens[0];
         comp_idx++;
     }
 
@@ -554,14 +577,16 @@ static void outputs_roundtrip(crypto_alg alg) {
     unlink(hex_path);
     free(hex_path);
 
-    free(sig);
+    /* sigs allocated on stack */
     free(enc);
     for (size_t i = 0; i < key_count; i++) {
         free(priv_parts[i].key);
         free(pub_parts[i].key);
     }
-    crypto_free_key(&priv);
-    crypto_free_key(&pub);
+    crypto_free_key(&privs[0]);
+    crypto_free_key(&privs[1]);
+    crypto_free_key(&pubs[0]);
+    crypto_free_key(&pubs[1]);
 }
 
 static void test_rsa_outputs(void **state) {
@@ -597,8 +622,9 @@ static void test_lms_mldsa_outputs(void **state) {
 /* When keys are provided, only the signature should be output */
 static void test_outputs_signature_only(void **state) {
     (void)state;
-    crypto_key priv = {0}, pub = {0};
-    assert_int_equal(crypto_keygen(CRYPTO_ALG_RSA4096, &priv, &pub), 0);
+    crypto_key privs[2] = {{0}};
+    crypto_key pubs[2] = {{0}};
+    assert_int_equal(crypto_keygen(CRYPTO_ALG_RSA4096, &privs[0], &pubs[0]), 0);
 
     uint8_t aes_key[CRYPTO_AES_MAX_KEY_SIZE];
     uint8_t iv[CRYPTO_AES_IV_SIZE];
@@ -606,12 +632,12 @@ static void test_outputs_signature_only(void **state) {
                                      aes_key, iv), 0);
 
     const uint8_t msg[] = "sig only";
-    size_t sig_len = CRYPTO_MAX_SIG_SIZE;
-    uint8_t *sig = malloc(sig_len);
-    assert_non_null(sig);
-    assert_int_equal(crypto_sign(CRYPTO_ALG_RSA4096, &priv,
+    uint8_t sigs[2][CRYPTO_MAX_SIG_SIZE];
+    size_t sig_lens[2] = {0};
+    sig_lens[0] = CRYPTO_MAX_SIG_SIZE;
+    assert_int_equal(crypto_sign(CRYPTO_ALG_RSA4096, &privs[0],
                                  msg, sizeof(msg) - 1,
-                                 sig, &sig_len), 0);
+                                 sigs[0], &sig_lens[0]), 0);
 
     size_t enc_len = sizeof(msg) - 1;
     size_t rem = enc_len % CRYPTO_AES_IV_SIZE;
@@ -627,15 +653,15 @@ static void test_outputs_signature_only(void **state) {
     assert_true(fd != -1);
     close(fd);
 
-    assert_int_equal(write_outputs(out_path, 0, &priv, &pub,
+    assert_int_equal(write_outputs(out_path, 0, CRYPTO_ALG_RSA4096, privs, pubs,
                                    aes_key, CRYPTO_AES_KEY_BITS_128 / 8,
-                                   iv, sig, sig_len, enc, enc_len), 0);
+                                   iv, sigs, sig_lens, enc, enc_len), 0);
 
     uint8_t *tmp = NULL;
     size_t len = 0;
     assert_int_equal(read_file("sig0.bin", &tmp, &len), 0);
-    assert_int_equal(len, sig_len);
-    assert_memory_equal(tmp, sig, sig_len);
+    assert_int_equal(len, sig_lens[0]);
+    assert_memory_equal(tmp, sigs[0], sig_lens[0]);
     free(tmp);
 
     assert_int_equal(access("aes.bin", F_OK), -1);
@@ -651,10 +677,9 @@ static void test_outputs_signature_only(void **state) {
     unlink(out_path);
     unlink(hex_path);
     free(hex_path);
-    free(sig);
     free(enc);
-    crypto_free_key(&priv);
-    crypto_free_key(&pub);
+    crypto_free_key(&privs[0]);
+    crypto_free_key(&pubs[0]);
 }
 
 /* Reject invalid parameters to AES initialisation routine */

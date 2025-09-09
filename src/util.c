@@ -1,5 +1,6 @@
 #include "util.h"
 #include "api.h"
+#include "hybrid_crypto.h"
 #include <mbedtls/lms.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -101,11 +102,12 @@ static int write_component(const char *name, const uint8_t *data, size_t len)
     return ret;
 }
 
-int write_outputs(const char *out_path, int include_keys,
-                  const crypto_key *priv, const crypto_key *pub,
+int write_outputs(const char *out_path, int include_keys, int alg,
+                  const crypto_key privs[2], const crypto_key pubs[2],
                   const uint8_t aes_key[CRYPTO_AES_MAX_KEY_SIZE],
                   size_t aes_key_len, const uint8_t iv[CRYPTO_AES_IV_SIZE],
-                  const uint8_t *sig, size_t sig_len, const uint8_t *enc,
+                  const uint8_t sigs[2][CRYPTO_MAX_SIG_SIZE],
+                  const size_t sig_lens[2], const uint8_t *enc,
                   size_t enc_len)
 {
     char hex_path[PATH_MAX];
@@ -123,33 +125,24 @@ int write_outputs(const char *out_path, int include_keys,
     printf("ciphertext binary: %s\n", out_path);
     printf("ciphertext hex: %s\n", hex_path);
 
-    int hybrid = crypto_is_hybrid_alg(priv->alg);
-    size_t sig_lens[2] = {0};
+    int hybrid = crypto_is_hybrid_alg(alg);
     if (hybrid) {
-        if (crypto_hybrid_get_sig_lens(priv->alg, &sig_lens[0],
-                                       &sig_lens[1]) != 0) {
+        if (write_component("sig0", sigs[0], sig_lens[0]) != 0) {
             return -1;
         }
-        if (sig_len != sig_lens[0] + sig_lens[1]) {
-            return -1;
-        }
-        if (write_component("sig0", sig, sig_lens[0]) != 0) {
-            return -1;
-        }
-        if (write_component("sig1", sig + sig_lens[0], sig_lens[1]) != 0) {
+        if (write_component("sig1", sigs[1], sig_lens[1]) != 0) {
             return -1;
         }
     } else {
-        if (write_component("sig0", sig, sig_len) != 0) {
+        if (write_component("sig0", sigs[0], sig_lens[0]) != 0) {
             return -1;
         }
     }
 
     if (include_keys) {
         int ret = 0;
-        crypto_key privs[2] = {{0}};
-        crypto_key pubs[2] = {{0}};
-        crypto_key priv_blob = {0}, pub_blob = {0};
+        crypto_key priv_blobs[2] = {{0}};
+        crypto_key pub_blobs[2] = {{0}};
 
         if (write_component("aes_iv", iv, CRYPTO_AES_IV_SIZE) != 0) {
             goto error;
@@ -159,32 +152,33 @@ int write_outputs(const char *out_path, int include_keys,
         }
 
         if (hybrid) {
-            if (crypto_hybrid_export_keypairs(priv->alg, priv, pub, privs,
-                                              pubs) != 0) {
+            if (hybrid_crypto_export_keypairs((hybrid_alg)alg, privs, pubs,
+                                              priv_blobs, pub_blobs) != 0) {
                 goto error;
             }
-
-            if (write_component("sk0", privs[0].key, privs[0].key_len) != 0) {
+            if (write_component("sk0", priv_blobs[0].key, priv_blobs[0].key_len) != 0) {
                 goto error;
             }
-            if (write_component("sk1", privs[1].key, privs[1].key_len) != 0) {
+            if (write_component("sk1", priv_blobs[1].key, priv_blobs[1].key_len) != 0) {
                 goto error;
             }
-            if (write_component("pk0", pubs[0].key, pubs[0].key_len) != 0) {
+            if (write_component("pk0", pub_blobs[0].key, pub_blobs[0].key_len) != 0) {
                 goto error;
             }
-            if (write_component("pk1", pubs[1].key, pubs[1].key_len) != 0) {
+            if (write_component("pk1", pub_blobs[1].key, pub_blobs[1].key_len) != 0) {
                 goto error;
             }
         } else {
-            if (crypto_export_keypair(priv->alg, priv, pub, &priv_blob,
-                                      &pub_blob) != 0) {
+            if (crypto_export_keypair((crypto_alg)alg, &privs[0], &pubs[0],
+                                      &priv_blobs[0], &pub_blobs[0]) != 0) {
                 goto error;
             }
-            if (write_component("sk0", priv_blob.key, priv_blob.key_len) != 0) {
+            if (write_component("sk0", priv_blobs[0].key,
+                                priv_blobs[0].key_len) != 0) {
                 goto error;
             }
-            if (write_component("pk0", pub_blob.key, pub_blob.key_len) != 0) {
+            if (write_component("pk0", pub_blobs[0].key,
+                                pub_blobs[0].key_len) != 0) {
                 goto error;
             }
         }
@@ -194,12 +188,10 @@ int write_outputs(const char *out_path, int include_keys,
         ret = -1;
 
     cleanup:
-        free(privs[0].key);
-        free(privs[1].key);
-        free(pubs[0].key);
-        free(pubs[1].key);
-        free(priv_blob.key);
-        free(pub_blob.key);
+        free(priv_blobs[0].key);
+        free(priv_blobs[1].key);
+        free(pub_blobs[0].key);
+        free(pub_blobs[1].key);
         if (ret != 0) {
             return -1;
         }

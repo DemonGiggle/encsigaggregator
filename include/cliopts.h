@@ -2,6 +2,7 @@
 #define CLIOPTS_H
 
 #include "crypto.h"
+#include "hybrid_crypto.h"
 #include <stddef.h>
 
 #ifdef __cplusplus
@@ -20,7 +21,7 @@ extern "C" {
  * @aes_iv_path:  AES IV file path
  */
 typedef struct {
-    crypto_alg alg;
+    int alg;
     size_t aes_bits;
     const char *infile;
     const char *outfile;

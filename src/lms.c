@@ -3,6 +3,7 @@
 #include <string.h>
 #include <mbedtls/entropy.h>
 #include <mbedtls/lms.h>
+#include "util.h"
 
 static int rng_callback(void *ctx, unsigned char *out, size_t len) {
     return mbedtls_ctr_drbg_random((mbedtls_ctr_drbg_context *)ctx, out, len);
@@ -48,18 +49,90 @@ int lms_keygen(mbedtls_ctr_drbg_context *drbg,
 
 int lms_load_keypair(const char *priv_path, const char *pub_path,
                      crypto_key *out_priv, crypto_key *out_pub) {
-    (void)priv_path;
-    (void)pub_path;
-    mbedtls_entropy_context entropy;
-    mbedtls_ctr_drbg_context drbg;
-    mbedtls_entropy_init(&entropy);
-    mbedtls_ctr_drbg_init(&drbg);
-    if (mbedtls_ctr_drbg_seed(&drbg, mbedtls_entropy_func, &entropy, NULL, 0) != 0) {
-        return -1;
+    unsigned char *priv_buf = NULL;
+    unsigned char *pub_buf  = NULL;
+    size_t priv_len = 0;
+    size_t pub_len  = 0;
+    mbedtls_lms_private_t *pr = NULL;
+    mbedtls_lms_public_t  *pu = NULL;
+    int ret = -1;
+
+    if (read_file(priv_path, &priv_buf, &priv_len) != 0 ||
+        read_file(pub_path, &pub_buf, &pub_len) != 0) {
+        goto cleanup;
     }
-    int ret = lms_keygen(&drbg, out_priv, out_pub);
-    mbedtls_ctr_drbg_free(&drbg);
-    mbedtls_entropy_free(&entropy);
+
+    pr = calloc(1, sizeof(*pr));
+    pu = calloc(1, sizeof(*pu));
+    if (!pr || !pu) {
+        goto cleanup;
+    }
+    mbedtls_lms_private_init(pr);
+    mbedtls_lms_public_init(pu);
+
+    unsigned char *p = priv_buf;
+    memcpy(&pr->MBEDTLS_PRIVATE(params), p,
+           sizeof(pr->MBEDTLS_PRIVATE(params)));
+    p += sizeof(pr->MBEDTLS_PRIVATE(params));
+    memcpy(&pr->MBEDTLS_PRIVATE(q_next_usable_key), p,
+           sizeof(pr->MBEDTLS_PRIVATE(q_next_usable_key)));
+    p += sizeof(pr->MBEDTLS_PRIVATE(q_next_usable_key));
+    size_t count = 1u << MBEDTLS_LMS_H_TREE_HEIGHT(
+        pr->MBEDTLS_PRIVATE(params).MBEDTLS_PRIVATE(type));
+    size_t expected = sizeof(pr->MBEDTLS_PRIVATE(params)) +
+                     sizeof(pr->MBEDTLS_PRIVATE(q_next_usable_key)) +
+                     count * sizeof(mbedtls_lmots_private_t) +
+                     count * sizeof(mbedtls_lmots_public_t) +
+                     sizeof(pr->MBEDTLS_PRIVATE(have_private_key));
+    if (priv_len != expected) {
+        goto cleanup;
+    }
+    pr->MBEDTLS_PRIVATE(ots_private_keys) = malloc(
+        count * sizeof(mbedtls_lmots_private_t));
+    pr->MBEDTLS_PRIVATE(ots_public_keys) = malloc(
+        count * sizeof(mbedtls_lmots_public_t));
+    if (!pr->MBEDTLS_PRIVATE(ots_private_keys) ||
+        !pr->MBEDTLS_PRIVATE(ots_public_keys)) {
+        goto cleanup;
+    }
+    memcpy(pr->MBEDTLS_PRIVATE(ots_private_keys), p,
+           count * sizeof(mbedtls_lmots_private_t));
+    p += count * sizeof(mbedtls_lmots_private_t);
+    memcpy(pr->MBEDTLS_PRIVATE(ots_public_keys), p,
+           count * sizeof(mbedtls_lmots_public_t));
+    p += count * sizeof(mbedtls_lmots_public_t);
+    memcpy(&pr->MBEDTLS_PRIVATE(have_private_key), p,
+           sizeof(pr->MBEDTLS_PRIVATE(have_private_key)));
+
+    if (mbedtls_lms_import_public_key(pu, pub_buf, pub_len) != 0) {
+        goto cleanup;
+    }
+
+    out_priv->alg     = CRYPTO_ALG_LMS;
+    out_pub->alg      = CRYPTO_ALG_LMS;
+    out_priv->type    = CRYPTO_KEY_TYPE_PRIVATE;
+    out_pub->type     = CRYPTO_KEY_TYPE_PUBLIC;
+    out_priv->key     = pr;
+    out_pub->key      = pu;
+    out_priv->key_len = sizeof(*pr);
+    out_pub->key_len  = sizeof(*pu);
+    pr = NULL;
+    pu = NULL;
+    ret = 0;
+
+cleanup:
+    free(priv_buf);
+    free(pub_buf);
+    if (ret != 0) {
+        if (pr) {
+            mbedtls_lms_private_free(pr);
+            free(pr);
+        }
+        if (pu) {
+            mbedtls_lms_public_free(pu);
+            free(pu);
+        }
+    }
     return ret;
 }
 

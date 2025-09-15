@@ -12,6 +12,12 @@
 #include <sys/wait.h>
 #include <limits.h>
 
+#ifndef TOOL_NAME
+#error "TOOL_NAME must be defined"
+#endif
+
+#define TOOL_PATH "./" TOOL_NAME
+
 static void cleanup_tool_outputs(void) {
     const char *paths[] = {
         "sk0.bin", "sk0.hex", "pk0.bin", "pk0.hex",
@@ -130,7 +136,7 @@ void test_tool_gen_keypair_when_aes_provided(void **state) {
     close(ofd);
 
     char cmd[PATH_MAX];
-    snprintf(cmd, sizeof(cmd), "./encsigtool -i %s -o %s --aes-key-path %s --aes-iv %s",
+    snprintf(cmd, sizeof(cmd), TOOL_PATH " -i %s -o %s --aes-key-path %s --aes-iv %s",
              in_path, out_path, key_path, iv_path);
     int ret = system(cmd);
     assert_true(ret != -1);
@@ -187,7 +193,7 @@ void test_tool_gen_aes_when_keys_provided(void **state) {
     close(ofd);
 
     char cmd[PATH_MAX];
-    snprintf(cmd, sizeof(cmd), "./encsigtool -i %s -o %s --pk-path %s --sk-path %s",
+    snprintf(cmd, sizeof(cmd), TOOL_PATH " -i %s -o %s --pk-path %s --sk-path %s",
              in_path, out_path, pk_path, sk_path);
     int ret = system(cmd);
     assert_true(ret != -1);

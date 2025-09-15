@@ -1,10 +1,15 @@
 MBEDTLS_DIR ?= libs/mbedtls
 PQCLEAN_DIR ?= libs/pqclean
 
+# Name of the command line tool produced by this project. Update this single
+# variable to change the tool's filename everywhere.
+TOOL_NAME ?= encsigtool
+
 CFLAGS += -Iinclude -I$(MBEDTLS_DIR)/include \
         -I$(PQCLEAN_DIR)/crypto_sign/ml-dsa-87/clean \
         -I$(PQCLEAN_DIR)/common \
         -DMBEDTLS_CONFIG_FILE='"mbedtls_custom_config.h"' \
+        -DTOOL_NAME='"$(TOOL_NAME)"' \
         -std=c99
 LDFLAGS += -L$(MBEDTLS_DIR)/library -lmbedtls -lmbedcrypto -lmbedx509 \
            -L$(PQCLEAN_DIR)/crypto_sign/ml-dsa-87/clean -lml-dsa-87_clean
@@ -27,7 +32,7 @@ MBEDTLS_LIBS = $(MBEDTLS_DIR)/library/libmbedtls.a \
                $(MBEDTLS_DIR)/library/libmbedx509.a
 PQ_LIB = $(PQCLEAN_DIR)/crypto_sign/ml-dsa-87/clean/libml-dsa-87_clean.a
 
-all: $(MBEDTLS_LIBS) $(PQ_LIB) libcrypto.a encsigtool
+all: $(MBEDTLS_LIBS) $(PQ_LIB) libcrypto.a $(TOOL_NAME)
 
 $(MBEDTLS_LIBS):
 	$(MAKE) -C $(MBEDTLS_DIR) library
@@ -39,18 +44,17 @@ libcrypto.a: $(OBJ)
 	ar rcs $@ $^
 
 clean:
-	rm -f $(OBJ) $(TOOL_OBJ) $(TEST_OBJ) libcrypto.a encsigtool $(TEST_BIN)
+	rm -f $(OBJ) $(TOOL_OBJ) $(TEST_OBJ) libcrypto.a $(TOOL_NAME) $(TEST_BIN)
 
-encsigtool: libcrypto.a $(TOOL_OBJ)
+$(TOOL_NAME): libcrypto.a $(TOOL_OBJ)
 	$(CC) $(CFLAGS) -o $@ $(TOOL_OBJ) -Wl,--start-group libcrypto.a $(LDFLAGS) -Wl,--end-group
-
 $(TEST_BIN): $(MBEDTLS_LIBS) $(PQ_LIB) libcrypto.a $(TEST_OBJ)
 	$(CC) $(CFLAGS) -o $@ $(TEST_OBJ) -Wl,--start-group libcrypto.a $(LDFLAGS) -Wl,--end-group -lcmocka
 
-test: $(MBEDTLS_LIBS) $(PQ_LIB) encsigtool $(TEST_BIN)
+test: $(MBEDTLS_LIBS) $(PQ_LIB) $(TOOL_NAME) $(TEST_BIN)
 	$(TEST_BIN)
 
 debug: CFLAGS += -g -O0
-debug: clean encsigtool
+debug: clean $(TOOL_NAME)
 
 .PHONY: all clean test debug

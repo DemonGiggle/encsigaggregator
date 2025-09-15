@@ -38,7 +38,8 @@ Follow these steps to build the library and run the unit tests:
    make
    ```
 
-   This produces `libcrypto.a` and the example tool `encsigtool`.
+   This produces `libcrypto.a` and the example command-line tool named according
+   to the `TOOL_NAME` variable.
 
 5. **Run the unit tests**:
 

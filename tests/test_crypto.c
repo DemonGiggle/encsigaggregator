@@ -438,6 +438,10 @@ static void test_hybrid_load_keypair(void **state) {
     assert_memory_equal(priv_parts2[0].key, priv_parts[0].key, priv_parts[0].key_len);
     assert_int_equal(pub_parts2[0].key_len, pub_parts[0].key_len);
     assert_memory_equal(pub_parts2[0].key, pub_parts[0].key, pub_parts[0].key_len);
+    assert_int_equal(priv_parts2[1].key_len, priv_parts[1].key_len);
+    assert_memory_equal(priv_parts2[1].key, priv_parts[1].key, priv_parts[1].key_len);
+    assert_int_equal(pub_parts2[1].key_len, pub_parts[1].key_len);
+    assert_memory_equal(pub_parts2[1].key, pub_parts[1].key, pub_parts[1].key_len);
 
     /* Ensure a signing roundtrip succeeds with the reloaded keys */
     const uint8_t msg[] = "roundtrip";
@@ -632,6 +636,10 @@ static void test_hybrid_load_keypair_rsa_lms(void **state) {
     assert_memory_equal(priv_parts2[0].key, priv_parts[0].key, priv_parts[0].key_len);
     assert_int_equal(pub_parts2[0].key_len, pub_parts[0].key_len);
     assert_memory_equal(pub_parts2[0].key, pub_parts[0].key, pub_parts[0].key_len);
+    assert_int_equal(priv_parts2[1].key_len, priv_parts[1].key_len);
+    assert_memory_equal(priv_parts2[1].key, priv_parts[1].key, priv_parts[1].key_len);
+    assert_int_equal(pub_parts2[1].key_len, pub_parts[1].key_len);
+    assert_memory_equal(pub_parts2[1].key, pub_parts[1].key, pub_parts[1].key_len);
     const uint8_t msg[] = "roundtrip";
     uint8_t sigs[2][CRYPTO_MAX_SIG_SIZE];
     size_t sig_lens[2] = {0};
@@ -688,6 +696,10 @@ static void test_hybrid_load_keypair_lms_mldsa(void **state) {
     assert_int_equal(hybrid_crypto_export_keypairs(CRYPTO_ALG_LMS_MLDSA87,
                                                   privs2, pubs2,
                                                   priv_parts2, pub_parts2), 0);
+    assert_int_equal(priv_parts2[0].key_len, priv_parts[0].key_len);
+    assert_memory_equal(priv_parts2[0].key, priv_parts[0].key, priv_parts[0].key_len);
+    assert_int_equal(pub_parts2[0].key_len, pub_parts[0].key_len);
+    assert_memory_equal(pub_parts2[0].key, pub_parts[0].key, pub_parts[0].key_len);
     assert_int_equal(priv_parts2[1].key_len, priv_parts[1].key_len);
     assert_memory_equal(priv_parts2[1].key, priv_parts[1].key, priv_parts[1].key_len);
     assert_int_equal(pub_parts2[1].key_len, pub_parts[1].key_len);

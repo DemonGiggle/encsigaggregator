@@ -35,21 +35,17 @@ extern "C" {
 #define CRYPTO_MAX_SIG_SIZE 10240
 
 /**
- * enum crypto_alg - supported cryptographic algorithm identifiers
+ * enum crypto_alg - supported primitive cryptographic algorithms
  * @CRYPTO_ALG_RSA4096: RSA with 4096-bit modulus
  * @CRYPTO_ALG_LMS: Leighton-Micali Signature scheme
  * @CRYPTO_ALG_MLDSA87: ML-DSA with 87-byte signatures
- * @CRYPTO_ALG_RSA4096_LMS: Hybrid RSA-4096 and LMS
- * @CRYPTO_ALG_RSA4096_MLDSA87: Hybrid RSA-4096 and ML-DSA87
- * @CRYPTO_ALG_LMS_MLDSA87: Hybrid LMS and ML-DSA87
+ * @CRYPTO_ALG_ENUM_END: marker for end of primitive algorithm identifiers
  */
 typedef enum {
     CRYPTO_ALG_RSA4096,
     CRYPTO_ALG_LMS,
     CRYPTO_ALG_MLDSA87,
-    CRYPTO_ALG_RSA4096_LMS,
-    CRYPTO_ALG_RSA4096_MLDSA87,
-    CRYPTO_ALG_LMS_MLDSA87
+    CRYPTO_ALG_ENUM_END,
 } crypto_alg;
 
 /**
@@ -198,50 +194,6 @@ int crypto_sha384(const uint8_t *in, size_t len,
 int crypto_export_keypair(crypto_alg alg, const crypto_key *priv,
                           const crypto_key *pub, crypto_key *out_priv,
                           crypto_key *out_pub);
-
-/**
- * crypto_hybrid_export_keypairs - export both components of a hybrid key pair
- * @alg: hybrid algorithm identifier
- * @priv: private hybrid key
- * @pub: public hybrid key
- * @out_priv: array to receive component private keys
- * @out_pub: array to receive component public keys
- *
- * Return: 0 on success, -1 on error.
- */
-int crypto_hybrid_export_keypairs(crypto_alg alg, const crypto_key *priv,
-                                  const crypto_key *pub,
-                                  crypto_key out_priv[2],
-                                  crypto_key out_pub[2]);
-
-/**
- * crypto_is_hybrid_alg - test if algorithm identifier represents a hybrid scheme
- * @alg: algorithm identifier
- *
- * Return: non-zero if @alg is a hybrid scheme, 0 otherwise.
- */
-int crypto_is_hybrid_alg(crypto_alg alg);
-
-/**
- * crypto_hybrid_get_algs - determine the underlying algorithms for a hybrid scheme
- * @alg: hybrid algorithm identifier
- * @first: receives first algorithm
- * @second: receives second algorithm
- *
- * Return: 0 on success, -1 on error.
- */
-int crypto_hybrid_get_algs(crypto_alg alg, crypto_alg *first,
-                           crypto_alg *second);
-
-/**
- * crypto_hybrid_get_sig_lens - get signature lengths for a hybrid algorithm
- * @alg: hybrid algorithm identifier
- * @len1: receives first signature length
- * @len2: receives second signature length
- *
- * Return: 0 on success, -1 on error.
- */
-int crypto_hybrid_get_sig_lens(crypto_alg alg, size_t *len1, size_t *len2);
 
 /**
  * crypto_free_key - release any resources held by a key

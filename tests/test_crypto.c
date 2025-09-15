@@ -394,99 +394,23 @@ static void test_lms_mldsa_sign_verify(void **state) {
     crypto_free_key(&pubs[1]);
 }
 
-/* Load a hybrid RSA+ML-DSA key pair from comma-separated files */
-static void test_hybrid_load_keypair(void **state) {
-    (void)state;
-
-    /* Generate a hybrid RSA+ML-DSA key pair and export its components */
-    crypto_key privs[2] = {{0}};
-    crypto_key pubs[2] = {{0}};
-    assert_int_equal(hybrid_crypto_keygen(CRYPTO_ALG_RSA4096_MLDSA87, privs, pubs), 0);
-    crypto_key priv_parts[2] = {{0}};
-    crypto_key pub_parts[2] = {{0}};
-    assert_int_equal(hybrid_crypto_export_keypairs(CRYPTO_ALG_RSA4096_MLDSA87,
-                                                  privs, pubs,
-                                                  priv_parts, pub_parts), 0);
-
-    /* Write each component to a temporary file */
-    char priv0_path[] = "/tmp/priv0XXXXXX";
-    write_key_to_temp_file(&priv_parts[0], priv0_path);
-    char priv1_path[] = "/tmp/priv1XXXXXX";
-    write_key_to_temp_file(&priv_parts[1], priv1_path);
-    char pub0_path[] = "/tmp/pub0XXXXXX";
-    write_key_to_temp_file(&pub_parts[0], pub0_path);
-    char pub1_path[] = "/tmp/pub1XXXXXX";
-    write_key_to_temp_file(&pub_parts[1], pub1_path);
-    /* Load the hybrid key pair from comma-separated file paths */
-    char priv_paths[2 * PATH_MAX];
-    char pub_paths[2 * PATH_MAX];
-    snprintf(priv_paths, sizeof(priv_paths), "%s,%s", priv0_path, priv1_path);
-    snprintf(pub_paths, sizeof(pub_paths), "%s,%s", pub0_path, pub1_path);
-    crypto_key privs2[2] = {{0}};
-    crypto_key pubs2[2] = {{0}};
-    assert_int_equal(hybrid_crypto_load_keypair(CRYPTO_ALG_RSA4096_MLDSA87,
-                                                priv_paths, pub_paths,
-                                                privs2, pubs2), 0);
-
-    crypto_key priv_parts2[2] = {{0}};
-    crypto_key pub_parts2[2] = {{0}};
-    assert_int_equal(hybrid_crypto_export_keypairs(CRYPTO_ALG_RSA4096_MLDSA87,
-                                                  privs2, pubs2,
-                                                  priv_parts2, pub_parts2), 0);
-
-    assert_int_equal(priv_parts2[0].key_len, priv_parts[0].key_len);
-    assert_memory_equal(priv_parts2[0].key, priv_parts[0].key, priv_parts[0].key_len);
-    assert_int_equal(pub_parts2[0].key_len, pub_parts[0].key_len);
-    assert_memory_equal(pub_parts2[0].key, pub_parts[0].key, pub_parts[0].key_len);
-    assert_int_equal(priv_parts2[1].key_len, priv_parts[1].key_len);
-    assert_memory_equal(priv_parts2[1].key, priv_parts[1].key, priv_parts[1].key_len);
-    assert_int_equal(pub_parts2[1].key_len, pub_parts[1].key_len);
-    assert_memory_equal(pub_parts2[1].key, pub_parts[1].key, pub_parts[1].key_len);
-
-    /* Ensure a signing roundtrip succeeds with the reloaded keys */
-    const uint8_t msg[] = "roundtrip";
-    uint8_t sigs[2][CRYPTO_MAX_SIG_SIZE];
-    size_t sig_lens[2] = {0};
-    assert_int_equal(hybrid_crypto_sign(CRYPTO_ALG_RSA4096_MLDSA87, privs2,
-                                        msg, sizeof(msg) - 1, sigs, sig_lens), 0);
-    assert_int_equal(hybrid_crypto_verify(CRYPTO_ALG_RSA4096_MLDSA87, pubs2,
-                                          msg, sizeof(msg) - 1, sigs, sig_lens), 0);
-
-    /* Clean up temporary files and key material */
-    unlink(priv0_path);
-    unlink(priv1_path);
-    unlink(pub0_path);
-    unlink(pub1_path);
-
-    for (int i = 0; i < 2; i++) {
-        crypto_free_key(&privs[i]);
-        crypto_free_key(&pubs[i]);
-        crypto_free_key(&privs2[i]);
-        crypto_free_key(&pubs2[i]);
-        free(priv_parts[i].key);
-        free(pub_parts[i].key);
-        free(priv_parts2[i].key);
-        free(pub_parts2[i].key);
-    }
-}
-
-/* Load RSA key pair from files */
-static void test_rsa_load_keypair(void **state) {
+/* Helper to validate serialization roundtrip for single algorithms */
+static void test_single_alg_load_keypair_roundtrip(void **state, crypto_alg alg) {
     (void)state;
     crypto_key priv = {0}, pub = {0};
-    assert_int_equal(crypto_keygen(CRYPTO_ALG_RSA4096, &priv, &pub), 0);
+    assert_int_equal(crypto_keygen(alg, &priv, &pub), 0);
     crypto_key priv_blob = {0}, pub_blob = {0};
-    assert_int_equal(crypto_export_keypair(CRYPTO_ALG_RSA4096, &priv, &pub,
+    assert_int_equal(crypto_export_keypair(alg, &priv, &pub,
                                           &priv_blob, &pub_blob), 0);
-    char priv_path[] = "/tmp/rsa_privXXXXXX";
+    char priv_path[] = "/tmp/privXXXXXX";
     write_key_to_temp_file(&priv_blob, priv_path);
-    char pub_path[] = "/tmp/rsa_pubXXXXXX";
+    char pub_path[] = "/tmp/pubXXXXXX";
     write_key_to_temp_file(&pub_blob, pub_path);
     crypto_key priv2 = {0}, pub2 = {0};
-    assert_int_equal(crypto_load_keypair(CRYPTO_ALG_RSA4096, priv_path, pub_path,
+    assert_int_equal(crypto_load_keypair(alg, priv_path, pub_path,
                                         &priv2, &pub2), 0);
     crypto_key priv_blob2 = {0}, pub_blob2 = {0};
-    assert_int_equal(crypto_export_keypair(CRYPTO_ALG_RSA4096, &priv2, &pub2,
+    assert_int_equal(crypto_export_keypair(alg, &priv2, &pub2,
                                           &priv_blob2, &pub_blob2), 0);
     assert_int_equal(priv_blob2.key_len, priv_blob.key_len);
     assert_memory_equal(priv_blob2.key, priv_blob.key, priv_blob.key_len);
@@ -494,11 +418,25 @@ static void test_rsa_load_keypair(void **state) {
     assert_memory_equal(pub_blob2.key, pub_blob.key, pub_blob.key_len);
     const uint8_t msg[] = "reload";
     uint8_t sig[CRYPTO_MAX_SIG_SIZE];
-    size_t sig_len = 0;
-    assert_int_equal(crypto_sign(CRYPTO_ALG_RSA4096, &priv2, msg,
+    size_t sig_len = sizeof(sig);
+    assert_int_equal(crypto_sign(alg, &priv2, msg,
                                  sizeof(msg) - 1, sig, &sig_len), 0);
-    assert_int_equal(sig_len, CRYPTO_RSA_SIG_SIZE);
-    assert_int_equal(crypto_verify(CRYPTO_ALG_RSA4096, &pub2, msg,
+    switch (alg) {
+    case CRYPTO_ALG_RSA4096:
+        assert_int_equal(sig_len, CRYPTO_RSA_SIG_SIZE);
+        break;
+    case CRYPTO_ALG_LMS:
+        assert_int_equal(sig_len,
+                         MBEDTLS_LMS_SIG_LEN(MBEDTLS_LMS_SHA256_M32_H10,
+                                             MBEDTLS_LMOTS_SHA256_N32_W8));
+        break;
+    case CRYPTO_ALG_MLDSA87:
+        assert_int_equal(sig_len, PQCLEAN_MLDSA87_CLEAN_CRYPTO_BYTES);
+        break;
+    default:
+        break;
+    }
+    assert_int_equal(crypto_verify(alg, &pub2, msg,
                                    sizeof(msg) - 1, sig, sig_len), 0);
     unlink(priv_path);
     unlink(pub_path);
@@ -512,220 +450,93 @@ static void test_rsa_load_keypair(void **state) {
     free(pub_blob2.key);
 }
 
-/* Load LMS key pair from files */
+/* Helper to validate serialization roundtrip for hybrid algorithms */
+static void test_hybrid_alg_load_keypair_roundtrip(void **state, hybrid_alg alg) {
+    (void)state;
+    crypto_key privs[2] = {{0}};
+    crypto_key pubs[2] = {{0}};
+    assert_int_equal(hybrid_crypto_keygen(alg, privs, pubs), 0);
+    crypto_key priv_parts[2] = {{0}};
+    crypto_key pub_parts[2] = {{0}};
+    assert_int_equal(hybrid_crypto_export_keypairs(alg, privs, pubs,
+                                                  priv_parts, pub_parts), 0);
+    char priv0_path[] = "/tmp/priv0XXXXXX";
+    write_key_to_temp_file(&priv_parts[0], priv0_path);
+    char priv1_path[] = "/tmp/priv1XXXXXX";
+    write_key_to_temp_file(&priv_parts[1], priv1_path);
+    char pub0_path[] = "/tmp/pub0XXXXXX";
+    write_key_to_temp_file(&pub_parts[0], pub0_path);
+    char pub1_path[] = "/tmp/pub1XXXXXX";
+    write_key_to_temp_file(&pub_parts[1], pub1_path);
+    char priv_paths[2 * PATH_MAX];
+    char pub_paths[2 * PATH_MAX];
+    snprintf(priv_paths, sizeof(priv_paths), "%s,%s", priv0_path, priv1_path);
+    snprintf(pub_paths, sizeof(pub_paths), "%s,%s", pub0_path, pub1_path);
+    crypto_key privs2[2] = {{0}};
+    crypto_key pubs2[2] = {{0}};
+    assert_int_equal(hybrid_crypto_load_keypair(alg, priv_paths, pub_paths,
+                                                privs2, pubs2), 0);
+    crypto_key priv_parts2[2] = {{0}};
+    crypto_key pub_parts2[2] = {{0}};
+    assert_int_equal(hybrid_crypto_export_keypairs(alg, privs2, pubs2,
+                                                  priv_parts2, pub_parts2), 0);
+    for (int i = 0; i < 2; i++) {
+        assert_int_equal(priv_parts2[i].key_len, priv_parts[i].key_len);
+        assert_memory_equal(priv_parts2[i].key, priv_parts[i].key,
+                            priv_parts[i].key_len);
+        assert_int_equal(pub_parts2[i].key_len, pub_parts[i].key_len);
+        assert_memory_equal(pub_parts2[i].key, pub_parts[i].key,
+                            pub_parts[i].key_len);
+    }
+    const uint8_t msg[] = "roundtrip";
+    uint8_t sigs[2][CRYPTO_MAX_SIG_SIZE];
+    size_t sig_lens[2] = {0};
+    assert_int_equal(hybrid_crypto_sign(alg, privs2,
+                                        msg, sizeof(msg) - 1,
+                                        sigs, sig_lens), 0);
+    assert_int_equal(hybrid_crypto_verify(alg, pubs2,
+                                          msg, sizeof(msg) - 1,
+                                          sigs, sig_lens), 0);
+    unlink(priv0_path);
+    unlink(priv1_path);
+    unlink(pub0_path);
+    unlink(pub1_path);
+    for (int i = 0; i < 2; i++) {
+        crypto_free_key(&privs[i]);
+        crypto_free_key(&pubs[i]);
+        crypto_free_key(&privs2[i]);
+        crypto_free_key(&pubs2[i]);
+        free(priv_parts[i].key);
+        free(pub_parts[i].key);
+        free(priv_parts2[i].key);
+        free(pub_parts2[i].key);
+    }
+}
+
+static void test_hybrid_load_keypair(void **state) {
+    test_hybrid_alg_load_keypair_roundtrip(state, CRYPTO_ALG_RSA4096_MLDSA87);
+}
+
+static void test_rsa_load_keypair(void **state) {
+    test_single_alg_load_keypair_roundtrip(state, CRYPTO_ALG_RSA4096);
+}
+
 static void test_lms_load_keypair(void **state) {
-    (void)state;
-    crypto_key priv = {0}, pub = {0};
-    assert_int_equal(crypto_keygen(CRYPTO_ALG_LMS, &priv, &pub), 0);
-    crypto_key priv_blob = {0}, pub_blob = {0};
-    assert_int_equal(crypto_export_keypair(CRYPTO_ALG_LMS, &priv, &pub,
-                                          &priv_blob, &pub_blob), 0);
-    char priv_path[] = "/tmp/lms_privXXXXXX";
-    write_key_to_temp_file(&priv_blob, priv_path);
-    char pub_path[] = "/tmp/lms_pubXXXXXX";
-    write_key_to_temp_file(&pub_blob, pub_path);
-    crypto_key priv2 = {0}, pub2 = {0};
-    assert_int_equal(crypto_load_keypair(CRYPTO_ALG_LMS, priv_path, pub_path,
-                                        &priv2, &pub2), 0);
-    crypto_key priv_blob2 = {0}, pub_blob2 = {0};
-    assert_int_equal(crypto_export_keypair(CRYPTO_ALG_LMS, &priv2, &pub2,
-                                          &priv_blob2, &pub_blob2), 0);
-    assert_int_equal(priv_blob2.key_len, priv_blob.key_len);
-    assert_memory_equal(priv_blob2.key, priv_blob.key, priv_blob.key_len);
-    assert_int_equal(pub_blob2.key_len, pub_blob.key_len);
-    assert_memory_equal(pub_blob2.key, pub_blob.key, pub_blob.key_len);
-    const uint8_t msg[] = "reload";
-    uint8_t sig[MBEDTLS_LMS_SIG_LEN(MBEDTLS_LMS_SHA256_M32_H10,
-                                    MBEDTLS_LMOTS_SHA256_N32_W8)];
-    size_t sig_len = sizeof(sig);
-    assert_int_equal(crypto_sign(CRYPTO_ALG_LMS, &priv2, msg,
-                                 sizeof(msg) - 1, sig, &sig_len), 0);
-    assert_int_equal(sig_len,
-                     MBEDTLS_LMS_SIG_LEN(MBEDTLS_LMS_SHA256_M32_H10,
-                                          MBEDTLS_LMOTS_SHA256_N32_W8));
-    assert_int_equal(crypto_verify(CRYPTO_ALG_LMS, &pub2, msg,
-                                   sizeof(msg) - 1, sig, sig_len), 0);
-    unlink(priv_path);
-    unlink(pub_path);
-    crypto_free_key(&priv);
-    crypto_free_key(&pub);
-    crypto_free_key(&priv2);
-    crypto_free_key(&pub2);
-    free(priv_blob.key);
-    free(pub_blob.key);
-    free(priv_blob2.key);
-    free(pub_blob2.key);
+    test_single_alg_load_keypair_roundtrip(state, CRYPTO_ALG_LMS);
 }
 
-/* Load ML-DSA key pair from files */
 static void test_mldsa_load_keypair(void **state) {
-    (void)state;
-    crypto_key priv = {0}, pub = {0};
-    assert_int_equal(crypto_keygen(CRYPTO_ALG_MLDSA87, &priv, &pub), 0);
-    crypto_key priv_blob = {0}, pub_blob = {0};
-    assert_int_equal(crypto_export_keypair(CRYPTO_ALG_MLDSA87, &priv, &pub,
-                                          &priv_blob, &pub_blob), 0);
-    char priv_path[] = "/tmp/mldsa_privXXXXXX";
-    write_key_to_temp_file(&priv_blob, priv_path);
-    char pub_path[] = "/tmp/mldsa_pubXXXXXX";
-    write_key_to_temp_file(&pub_blob, pub_path);
-    crypto_key priv2 = {0}, pub2 = {0};
-    assert_int_equal(crypto_load_keypair(CRYPTO_ALG_MLDSA87, priv_path, pub_path,
-                                        &priv2, &pub2), 0);
-    crypto_key priv_blob2 = {0}, pub_blob2 = {0};
-    assert_int_equal(crypto_export_keypair(CRYPTO_ALG_MLDSA87, &priv2, &pub2,
-                                          &priv_blob2, &pub_blob2), 0);
-    assert_int_equal(priv_blob2.key_len, priv_blob.key_len);
-    assert_memory_equal(priv_blob2.key, priv_blob.key, priv_blob.key_len);
-    assert_int_equal(pub_blob2.key_len, pub_blob.key_len);
-    assert_memory_equal(pub_blob2.key, pub_blob.key, pub_blob.key_len);
-    const uint8_t msg[] = "reload";
-    uint8_t sig[PQCLEAN_MLDSA87_CLEAN_CRYPTO_BYTES + 32];
-    size_t sig_len = sizeof(sig);
-    assert_int_equal(crypto_sign(CRYPTO_ALG_MLDSA87, &priv2, msg,
-                                 sizeof(msg) - 1, sig, &sig_len), 0);
-    assert_int_equal(sig_len, PQCLEAN_MLDSA87_CLEAN_CRYPTO_BYTES);
-    assert_int_equal(crypto_verify(CRYPTO_ALG_MLDSA87, &pub2, msg,
-                                   sizeof(msg) - 1, sig, sig_len), 0);
-    unlink(priv_path);
-    unlink(pub_path);
-    crypto_free_key(&priv);
-    crypto_free_key(&pub);
-    crypto_free_key(&priv2);
-    crypto_free_key(&pub2);
-    free(priv_blob.key);
-    free(pub_blob.key);
-    free(priv_blob2.key);
-    free(pub_blob2.key);
+    test_single_alg_load_keypair_roundtrip(state, CRYPTO_ALG_MLDSA87);
 }
 
-/* Load a hybrid RSA+LMS key pair from comma-separated files */
 static void test_hybrid_load_keypair_rsa_lms(void **state) {
-    (void)state;
-    crypto_key privs[2] = {{0}};
-    crypto_key pubs[2] = {{0}};
-    assert_int_equal(hybrid_crypto_keygen(CRYPTO_ALG_RSA4096_LMS, privs, pubs), 0);
-    crypto_key priv_parts[2] = {{0}};
-    crypto_key pub_parts[2] = {{0}};
-    assert_int_equal(hybrid_crypto_export_keypairs(CRYPTO_ALG_RSA4096_LMS,
-                                                  privs, pubs,
-                                                  priv_parts, pub_parts), 0);
-    char priv0_path[] = "/tmp/priv0XXXXXX";
-    write_key_to_temp_file(&priv_parts[0], priv0_path);
-    char priv1_path[] = "/tmp/priv1XXXXXX";
-    write_key_to_temp_file(&priv_parts[1], priv1_path);
-    char pub0_path[] = "/tmp/pub0XXXXXX";
-    write_key_to_temp_file(&pub_parts[0], pub0_path);
-    char pub1_path[] = "/tmp/pub1XXXXXX";
-    write_key_to_temp_file(&pub_parts[1], pub1_path);
-    char priv_paths[2 * PATH_MAX];
-    char pub_paths[2 * PATH_MAX];
-    snprintf(priv_paths, sizeof(priv_paths), "%s,%s", priv0_path, priv1_path);
-    snprintf(pub_paths, sizeof(pub_paths), "%s,%s", pub0_path, pub1_path);
-    crypto_key privs2[2] = {{0}};
-    crypto_key pubs2[2] = {{0}};
-    assert_int_equal(hybrid_crypto_load_keypair(CRYPTO_ALG_RSA4096_LMS,
-                                                priv_paths, pub_paths,
-                                                privs2, pubs2), 0);
-    crypto_key priv_parts2[2] = {{0}};
-    crypto_key pub_parts2[2] = {{0}};
-    assert_int_equal(hybrid_crypto_export_keypairs(CRYPTO_ALG_RSA4096_LMS,
-                                                  privs2, pubs2,
-                                                  priv_parts2, pub_parts2), 0);
-    assert_int_equal(priv_parts2[0].key_len, priv_parts[0].key_len);
-    assert_memory_equal(priv_parts2[0].key, priv_parts[0].key, priv_parts[0].key_len);
-    assert_int_equal(pub_parts2[0].key_len, pub_parts[0].key_len);
-    assert_memory_equal(pub_parts2[0].key, pub_parts[0].key, pub_parts[0].key_len);
-    assert_int_equal(priv_parts2[1].key_len, priv_parts[1].key_len);
-    assert_memory_equal(priv_parts2[1].key, priv_parts[1].key, priv_parts[1].key_len);
-    assert_int_equal(pub_parts2[1].key_len, pub_parts[1].key_len);
-    assert_memory_equal(pub_parts2[1].key, pub_parts[1].key, pub_parts[1].key_len);
-    const uint8_t msg[] = "roundtrip";
-    uint8_t sigs[2][CRYPTO_MAX_SIG_SIZE];
-    size_t sig_lens[2] = {0};
-    assert_int_equal(hybrid_crypto_sign(CRYPTO_ALG_RSA4096_LMS, privs2,
-                                        msg, sizeof(msg) - 1, sigs, sig_lens), 0);
-    assert_int_equal(hybrid_crypto_verify(CRYPTO_ALG_RSA4096_LMS, pubs2,
-                                          msg, sizeof(msg) - 1, sigs, sig_lens), 0);
-    unlink(priv0_path);
-    unlink(priv1_path);
-    unlink(pub0_path);
-    unlink(pub1_path);
-    for (int i = 0; i < 2; i++) {
-        crypto_free_key(&privs[i]);
-        crypto_free_key(&pubs[i]);
-        crypto_free_key(&privs2[i]);
-        crypto_free_key(&pubs2[i]);
-        free(priv_parts[i].key);
-        free(pub_parts[i].key);
-        free(priv_parts2[i].key);
-        free(pub_parts2[i].key);
-    }
+    test_hybrid_alg_load_keypair_roundtrip(state, CRYPTO_ALG_RSA4096_LMS);
 }
 
-/* Load a hybrid LMS+ML-DSA key pair from comma-separated files */
 static void test_hybrid_load_keypair_lms_mldsa(void **state) {
-    (void)state;
-    crypto_key privs[2] = {{0}};
-    crypto_key pubs[2] = {{0}};
-    assert_int_equal(hybrid_crypto_keygen(CRYPTO_ALG_LMS_MLDSA87, privs, pubs), 0);
-    crypto_key priv_parts[2] = {{0}};
-    crypto_key pub_parts[2] = {{0}};
-    assert_int_equal(hybrid_crypto_export_keypairs(CRYPTO_ALG_LMS_MLDSA87,
-                                                  privs, pubs,
-                                                  priv_parts, pub_parts), 0);
-    char priv0_path[] = "/tmp/priv0XXXXXX";
-    write_key_to_temp_file(&priv_parts[0], priv0_path);
-    char priv1_path[] = "/tmp/priv1XXXXXX";
-    write_key_to_temp_file(&priv_parts[1], priv1_path);
-    char pub0_path[] = "/tmp/pub0XXXXXX";
-    write_key_to_temp_file(&pub_parts[0], pub0_path);
-    char pub1_path[] = "/tmp/pub1XXXXXX";
-    write_key_to_temp_file(&pub_parts[1], pub1_path);
-    char priv_paths[2 * PATH_MAX];
-    char pub_paths[2 * PATH_MAX];
-    snprintf(priv_paths, sizeof(priv_paths), "%s,%s", priv0_path, priv1_path);
-    snprintf(pub_paths, sizeof(pub_paths), "%s,%s", pub0_path, pub1_path);
-    crypto_key privs2[2] = {{0}};
-    crypto_key pubs2[2] = {{0}};
-    assert_int_equal(hybrid_crypto_load_keypair(CRYPTO_ALG_LMS_MLDSA87,
-                                                priv_paths, pub_paths,
-                                                privs2, pubs2), 0);
-    crypto_key priv_parts2[2] = {{0}};
-    crypto_key pub_parts2[2] = {{0}};
-    assert_int_equal(hybrid_crypto_export_keypairs(CRYPTO_ALG_LMS_MLDSA87,
-                                                  privs2, pubs2,
-                                                  priv_parts2, pub_parts2), 0);
-    assert_int_equal(priv_parts2[0].key_len, priv_parts[0].key_len);
-    assert_memory_equal(priv_parts2[0].key, priv_parts[0].key, priv_parts[0].key_len);
-    assert_int_equal(pub_parts2[0].key_len, pub_parts[0].key_len);
-    assert_memory_equal(pub_parts2[0].key, pub_parts[0].key, pub_parts[0].key_len);
-    assert_int_equal(priv_parts2[1].key_len, priv_parts[1].key_len);
-    assert_memory_equal(priv_parts2[1].key, priv_parts[1].key, priv_parts[1].key_len);
-    assert_int_equal(pub_parts2[1].key_len, pub_parts[1].key_len);
-    assert_memory_equal(pub_parts2[1].key, pub_parts[1].key, pub_parts[1].key_len);
-    const uint8_t msg[] = "roundtrip";
-    uint8_t sigs[2][CRYPTO_MAX_SIG_SIZE];
-    size_t sig_lens[2] = {0};
-    assert_int_equal(hybrid_crypto_sign(CRYPTO_ALG_LMS_MLDSA87, privs2,
-                                        msg, sizeof(msg) - 1, sigs, sig_lens), 0);
-    assert_int_equal(hybrid_crypto_verify(CRYPTO_ALG_LMS_MLDSA87, pubs2,
-                                          msg, sizeof(msg) - 1, sigs, sig_lens), 0);
-    unlink(priv0_path);
-    unlink(priv1_path);
-    unlink(pub0_path);
-    unlink(pub1_path);
-    for (int i = 0; i < 2; i++) {
-        crypto_free_key(&privs[i]);
-        crypto_free_key(&pubs[i]);
-        crypto_free_key(&privs2[i]);
-        crypto_free_key(&pubs2[i]);
-        free(priv_parts[i].key);
-        free(pub_parts[i].key);
-        free(priv_parts2[i].key);
-        free(pub_parts2[i].key);
-    }
+    test_hybrid_alg_load_keypair_roundtrip(state, CRYPTO_ALG_LMS_MLDSA87);
 }
+
 
 static void outputs_roundtrip(int alg) {
     crypto_key privs[2] = {{0}};

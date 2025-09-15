@@ -523,6 +523,13 @@ static void test_lms_load_keypair(void **state) {
     crypto_key priv2 = {0}, pub2 = {0};
     assert_int_equal(crypto_load_keypair(CRYPTO_ALG_LMS, priv_path, pub_path,
                                         &priv2, &pub2), 0);
+    crypto_key priv_blob2 = {0}, pub_blob2 = {0};
+    assert_int_equal(crypto_export_keypair(CRYPTO_ALG_LMS, &priv2, &pub2,
+                                          &priv_blob2, &pub_blob2), 0);
+    assert_int_equal(priv_blob2.key_len, priv_blob.key_len);
+    assert_memory_equal(priv_blob2.key, priv_blob.key, priv_blob.key_len);
+    assert_int_equal(pub_blob2.key_len, pub_blob.key_len);
+    assert_memory_equal(pub_blob2.key, pub_blob.key, pub_blob.key_len);
     const uint8_t msg[] = "reload";
     uint8_t sig[MBEDTLS_LMS_SIG_LEN(MBEDTLS_LMS_SHA256_M32_H10,
                                     MBEDTLS_LMOTS_SHA256_N32_W8)];
@@ -542,6 +549,8 @@ static void test_lms_load_keypair(void **state) {
     crypto_free_key(&pub2);
     free(priv_blob.key);
     free(pub_blob.key);
+    free(priv_blob2.key);
+    free(pub_blob2.key);
 }
 
 /* Load ML-DSA key pair from files */

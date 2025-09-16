@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "util.h"
+#include "hybrid_crypto.h"
 #include "lms.h"
 #include "rsa.h"
 #include "mldsa.h"
@@ -11,6 +12,27 @@
 #include <mbedtls/entropy.h>
 #include <mbedtls/md.h>
 #include <mbedtls/lms.h>
+
+
+const char *crypto_alg_name(int alg)
+{
+    switch (alg) {
+    case CRYPTO_ALG_RSA4096:
+        return "rsa";
+    case CRYPTO_ALG_LMS:
+        return "lms";
+    case CRYPTO_ALG_MLDSA87:
+        return "mldsa87";
+    case CRYPTO_ALG_RSA4096_LMS:
+        return "rsa-lms";
+    case CRYPTO_ALG_RSA4096_MLDSA87:
+        return "rsa-mldsa87";
+    case CRYPTO_ALG_LMS_MLDSA87:
+        return "lms-mldsa87";
+    default:
+        return "unknown";
+    }
+}
 
 
 int crypto_init_aes(size_t bits, const char *key_path, const char *iv_path,

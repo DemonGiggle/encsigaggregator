@@ -55,6 +55,8 @@ int cli_parse_args(int argc, char **argv, cli_options *opts);
  */
 void cli_usage(const char *prog);
 
+void print_run_options(const cli_options *opts, int generate_pk, int generate_aes);
+
 #ifdef __cplusplus
 }
 #endif

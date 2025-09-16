@@ -170,3 +170,20 @@ int cli_parse_args(int argc, char **argv, cli_options *o)
     return 0;
 }
 
+void print_run_options(const cli_options *opts, int generate_pk, int generate_aes)
+{
+    if (!opts) {
+        return;
+    }
+
+    const char *alg_name = crypto_alg_name(opts->alg);
+
+    printf("Run summary:\n");
+    printf("  Algorithm: %s\n", alg_name);
+    printf("  AES key bits: %zu\n", opts->aes_bits);
+    printf("  Signing keys: %s\n",
+           generate_pk ? "generated new key pair" : "using provided key pair");
+    printf("  AES material: %s\n",
+           generate_aes ? "generated new key and IV" : "using provided key and IV");
+}
+

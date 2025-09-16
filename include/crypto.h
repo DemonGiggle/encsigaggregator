@@ -201,6 +201,8 @@ int crypto_export_keypair(crypto_alg alg, const crypto_key *priv,
  */
 void crypto_free_key(crypto_key *key);
 
+const char *crypto_alg_name(int alg);
+
 #ifdef __cplusplus
 }
 #endif

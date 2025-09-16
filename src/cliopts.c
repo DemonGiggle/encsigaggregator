@@ -148,11 +148,21 @@ int cli_parse_args(int argc, char **argv, cli_options *o)
     }
 
     if (o->verify_sig && !o->sig_path) {
+        fprintf(stderr, "--verify-sig requires --sig-path\n");
         cli_usage(argv[0]);
         return -1;
     }
 
     if (o->verify_dec && (!o->expected_path || !o->aes_key_path || !o->aes_iv_path)) {
+        if (!o->expected_path) {
+            fprintf(stderr, "--verify-dec requires --expected-file\n");
+        }
+        if (!o->aes_key_path) {
+            fprintf(stderr, "--verify-dec requires --aes-key-path\n");
+        }
+        if (!o->aes_iv_path) {
+            fprintf(stderr, "--verify-dec requires --aes-iv\n");
+        }
         cli_usage(argv[0]);
         return -1;
     }

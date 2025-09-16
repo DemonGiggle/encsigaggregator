@@ -4,5 +4,6 @@
 #include "cliopts.h"
 
 int verify_sig_mode(const cli_options *opts);
+int verify_dec_mode(const cli_options *opts);
 
 #endif /* VERIFY_MODE_H */

@@ -12,17 +12,23 @@ void cli_usage(const char *prog)
     fprintf(stderr,
             "       %s --verify-sig --sig-path f --pk-path f --sk-path f -i in\n",
             prog);
+    fprintf(stderr,
+            "       %s --verify-dec --expected-file f --aes-key-path f --aes-iv f -i in [-o out]\n",
+            prog);
     fprintf(stderr, "  -a <alg>            signing algorithm: rsa,lms,mldsa87,rsa-lms,rsa-mldsa87,lms-mldsa87\n");
     fprintf(stderr, "  -b <bits>           AES key bits: 128,192,256\n");
     fprintf(stderr,
             "  --pk-path <file[,file]>    public key file(s)\n");
     fprintf(stderr,
             "  --sk-path <file[,file]>    private key file(s)\n");
-    fprintf(stderr, "  --aes-key-path <f>  AES key file\n");
-    fprintf(stderr, "  --aes-iv <f>        AES IV file (optional)\n");
+    fprintf(stderr, "  --aes-key-path <f>  AES key file (required with --verify-dec)\n");
+    fprintf(stderr, "  --aes-iv <f>        AES IV file (required with --verify-dec)\n");
     fprintf(stderr, "  --verify-sig        verify signature(s) instead of generating output\n");
+    fprintf(stderr, "  --verify-dec        verify AES decryption against an expected file\n");
     fprintf(stderr,
             "  --sig-path <file[,file]>  signature file(s) for verification\n");
+    fprintf(stderr,
+            "  --expected-file <file>  expected plaintext for decryption verification\n");
     fprintf(stderr, "  -i <file>           input file\n");
     fprintf(stderr, "  -o <file>           output file\n");
 }
@@ -33,17 +39,19 @@ int cli_parse_args(int argc, char **argv, cli_options *o)
         return -1;
     }
 
-    optind          = 1;
-    o->alg          = CRYPTO_ALG_RSA4096;
-    o->aes_bits     = CRYPTO_AES_KEY_BITS_256;
-    o->infile       = NULL;
-    o->outfile      = NULL;
-    o->pk_path      = NULL;
-    o->sk_path      = NULL;
-    o->aes_key_path = NULL;
-    o->aes_iv_path  = NULL;
-    o->verify_sig   = 0;
-    o->sig_path     = NULL;
+    optind            = 1;
+    o->alg            = CRYPTO_ALG_RSA4096;
+    o->aes_bits       = CRYPTO_AES_KEY_BITS_256;
+    o->infile         = NULL;
+    o->outfile        = NULL;
+    o->pk_path        = NULL;
+    o->sk_path        = NULL;
+    o->aes_key_path   = NULL;
+    o->aes_iv_path    = NULL;
+    o->verify_sig     = 0;
+    o->sig_path       = NULL;
+    o->verify_dec     = 0;
+    o->expected_path  = NULL;
 
     static const struct option long_opts[] = {
         {"pk-path", required_argument, NULL, 1},
@@ -52,6 +60,8 @@ int cli_parse_args(int argc, char **argv, cli_options *o)
         {"aes-iv", required_argument, NULL, 4},
         {"verify-sig", no_argument, NULL, 5},
         {"sig-path", required_argument, NULL, 6},
+        {"verify-dec", no_argument, NULL, 7},
+        {"expected-file", required_argument, NULL, 8},
         {0, 0, 0, 0}
     };
 
@@ -109,6 +119,12 @@ int cli_parse_args(int argc, char **argv, cli_options *o)
         case 6:
             o->sig_path = optarg;
             break;
+        case 7:
+            o->verify_dec = 1;
+            break;
+        case 8:
+            o->expected_path = optarg;
+            break;
         default:
             cli_usage(argv[0]);
             return -1;
@@ -120,12 +136,33 @@ int cli_parse_args(int argc, char **argv, cli_options *o)
         return -1;
     }
 
-    if (!o->verify_sig && !o->outfile) {
+    if (!o->verify_sig && !o->verify_dec && !o->outfile) {
+        cli_usage(argv[0]);
+        return -1;
+    }
+
+    if (o->verify_sig && o->verify_dec) {
+        fprintf(stderr, "Signature and decryption verification modes are mutually exclusive\n");
         cli_usage(argv[0]);
         return -1;
     }
 
     if (o->verify_sig && !o->sig_path) {
+        fprintf(stderr, "--verify-sig requires --sig-path\n");
+        cli_usage(argv[0]);
+        return -1;
+    }
+
+    if (o->verify_dec && (!o->expected_path || !o->aes_key_path || !o->aes_iv_path)) {
+        if (!o->expected_path) {
+            fprintf(stderr, "--verify-dec requires --expected-file\n");
+        }
+        if (!o->aes_key_path) {
+            fprintf(stderr, "--verify-dec requires --aes-key-path\n");
+        }
+        if (!o->aes_iv_path) {
+            fprintf(stderr, "--verify-dec requires --aes-iv\n");
+        }
         cli_usage(argv[0]);
         return -1;
     }

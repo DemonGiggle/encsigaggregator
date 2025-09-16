@@ -19,6 +19,10 @@ int main(int argc, char **argv)
         return verify_sig_mode(&opts);
     }
 
+    if (opts.verify_dec) {
+        return verify_dec_mode(&opts);
+    }
+
     int have_pk = opts.pk_path && opts.sk_path;
     int have_aes = opts.aes_key_path != NULL;
     if ((opts.pk_path && !opts.sk_path) || (!opts.pk_path && opts.sk_path)) {

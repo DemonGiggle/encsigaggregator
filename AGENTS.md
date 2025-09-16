@@ -2,8 +2,10 @@ Coding Guidelines and Build Steps
 ================================
 
 - Use C99 for all C source files.
-- Keep main.c concise by delegating cryptographic loading/generation logic to
-  crypto.c helper functions.
+- Keep `main.c` concise by delegating cryptographic loading/generation logic to
+  helper modules (e.g., `crypto.c`).
+- When writing blocks of consecutive assignments or initialisations, align the
+  `=` signs to improve readability.
 
 Build & Test Workflow
 ---------------------

@@ -21,7 +21,7 @@ SRC = src/crypto.c src/hybrid_crypto.c src/lms.c src/rsa.c src/mldsa.c src/util.
        $(PQCLEAN_DIR)/common/nistseedexpander.c \
        $(PQCLEAN_DIR)/common/sp800-185.c
 OBJ = $(SRC:.c=.o)
-TOOL_SRC = src/main.c src/cliopts.c
+TOOL_SRC = src/main.c src/cliopts.c src/verify_mode.c
 TOOL_OBJ = $(TOOL_SRC:.c=.o)
 TEST_SRC = tests/test_crypto.c tests/test_cli.c tests/test_runner.c
 TEST_OBJ = $(TEST_SRC:.c=.o) src/cliopts.o

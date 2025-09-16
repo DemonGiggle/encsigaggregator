@@ -9,6 +9,9 @@ void cli_usage(const char *prog)
     fprintf(stderr,
             "Usage: %s [-a alg] [-b bits] [--pk-path f --sk-path f --aes-key-path f --aes-iv f] -i in -o out\n",
             prog);
+    fprintf(stderr,
+            "       %s --verify-sig --sig-path f --pk-path f --sk-path f -i in\n",
+            prog);
     fprintf(stderr, "  -a <alg>            signing algorithm: rsa,lms,mldsa87,rsa-lms,rsa-mldsa87,lms-mldsa87\n");
     fprintf(stderr, "  -b <bits>           AES key bits: 128,192,256\n");
     fprintf(stderr,
@@ -17,6 +20,9 @@ void cli_usage(const char *prog)
             "  --sk-path <file[,file]>    private key file(s)\n");
     fprintf(stderr, "  --aes-key-path <f>  AES key file\n");
     fprintf(stderr, "  --aes-iv <f>        AES IV file (optional)\n");
+    fprintf(stderr, "  --verify-sig        verify signature(s) instead of generating output\n");
+    fprintf(stderr,
+            "  --sig-path <file[,file]>  signature file(s) for verification\n");
     fprintf(stderr, "  -i <file>           input file\n");
     fprintf(stderr, "  -o <file>           output file\n");
 }
@@ -36,12 +42,16 @@ int cli_parse_args(int argc, char **argv, cli_options *o)
     o->sk_path      = NULL;
     o->aes_key_path = NULL;
     o->aes_iv_path  = NULL;
+    o->verify_sig   = 0;
+    o->sig_path     = NULL;
 
     static const struct option long_opts[] = {
         {"pk-path", required_argument, NULL, 1},
         {"sk-path", required_argument, NULL, 2},
         {"aes-key-path", required_argument, NULL, 3},
         {"aes-iv", required_argument, NULL, 4},
+        {"verify-sig", no_argument, NULL, 5},
+        {"sig-path", required_argument, NULL, 6},
         {0, 0, 0, 0}
     };
 
@@ -93,13 +103,29 @@ int cli_parse_args(int argc, char **argv, cli_options *o)
         case 4:
             o->aes_iv_path = optarg;
             break;
+        case 5:
+            o->verify_sig = 1;
+            break;
+        case 6:
+            o->sig_path = optarg;
+            break;
         default:
             cli_usage(argv[0]);
             return -1;
         }
     }
 
-    if (!o->infile || !o->outfile) {
+    if (!o->infile) {
+        cli_usage(argv[0]);
+        return -1;
+    }
+
+    if (!o->verify_sig && !o->outfile) {
+        cli_usage(argv[0]);
+        return -1;
+    }
+
+    if (o->verify_sig && !o->sig_path) {
         cli_usage(argv[0]);
         return -1;
     }

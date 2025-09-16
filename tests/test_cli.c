@@ -72,6 +72,18 @@ void test_cli_valid_minimal(void **state) {
     assert_string_equal(opts.outfile, "out");
 }
 
+/* Parse verification options and ensure output path is optional. */
+void test_cli_verify_parse(void **state) {
+    (void)state;
+    char *argv[] = {"prog", "--verify-sig", "--sig-path", "sig0.bin", "-i", "in", NULL};
+    cli_options opts;
+    assert_int_equal(cli_parse_args(6, argv, &opts), 0);
+    assert_int_equal(opts.verify_sig, 1);
+    assert_string_equal(opts.sig_path, "sig0.bin");
+    assert_string_equal(opts.infile, "in");
+    assert_null(opts.outfile);
+}
+
 /* Accept RSA+LMS algorithm selection. */
 void test_cli_rsa_lms(void **state) {
     (void)state;
@@ -216,6 +228,53 @@ void test_tool_gen_aes_when_keys_provided(void **state) {
     crypto_free_key(&pub);
 }
 
+/* Run signing followed by verification through the CLI. */
+void test_tool_verify_signature(void **state) {
+    (void)state;
+    cleanup_tool_outputs();
+
+    char in_path[] = "/tmp/inXXXXXX";
+    int ifd = mkstemp(in_path);
+    assert_true(ifd != -1);
+    FILE *f = fdopen(ifd, "wb");
+    assert_non_null(f);
+    const char *msg = "verify";
+    assert_int_equal(fwrite(msg, 1, strlen(msg), f), (int)strlen(msg));
+    fclose(f);
+
+    char out_path[] = "/tmp/outXXXXXX";
+    int ofd = mkstemp(out_path);
+    assert_true(ofd != -1);
+    close(ofd);
+
+    char cmd[PATH_MAX];
+    snprintf(cmd, sizeof(cmd), TOOL_PATH " -i %s -o %s", in_path, out_path);
+    int ret = system(cmd);
+    assert_true(ret != -1);
+    assert_true(WIFEXITED(ret));
+    assert_int_equal(WEXITSTATUS(ret), 0);
+
+    assert_int_equal(access("sig0.bin", F_OK), 0);
+    assert_int_equal(access("pk0.bin", F_OK), 0);
+    assert_int_equal(access("sk0.bin", F_OK), 0);
+
+    char verify_cmd[PATH_MAX * 2];
+    snprintf(verify_cmd, sizeof(verify_cmd),
+             TOOL_PATH " --verify-sig --sig-path sig0.bin --pk-path pk0.bin --sk-path sk0.bin -i %s",
+             in_path);
+    ret = system(verify_cmd);
+    assert_true(ret != -1);
+    assert_true(WIFEXITED(ret));
+    assert_int_equal(WEXITSTATUS(ret), 0);
+
+    cleanup_tool_outputs();
+    unlink(out_path);
+    char out_hex[PATH_MAX];
+    snprintf(out_hex, sizeof(out_hex), "%s.hex", out_path);
+    unlink(out_hex);
+    unlink(in_path);
+}
+
 
 const struct CMUnitTest cli_tests[] = {
     cmocka_unit_test(test_cli_invalid_alg),
@@ -223,11 +282,13 @@ const struct CMUnitTest cli_tests[] = {
     cmocka_unit_test(test_cli_missing_infile),
     cmocka_unit_test(test_cli_missing_outfile),
     cmocka_unit_test(test_cli_valid_minimal),
+    cmocka_unit_test(test_cli_verify_parse),
     cmocka_unit_test(test_cli_rsa_lms),
     cmocka_unit_test(test_cli_rsa_mldsa),
     cmocka_unit_test(test_cli_lms_mldsa),
     cmocka_unit_test(test_tool_gen_keypair_when_aes_provided),
     cmocka_unit_test(test_tool_gen_aes_when_keys_provided),
+    cmocka_unit_test(test_tool_verify_signature),
 };
 
 const size_t cli_tests_count = sizeof(cli_tests) / sizeof(cli_tests[0]);

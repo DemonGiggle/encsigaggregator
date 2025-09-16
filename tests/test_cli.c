@@ -276,6 +276,116 @@ void test_tool_verify_signature(void **state) {
 }
 
 
+/* Run decryption verification through the CLI and confirm success. */
+void test_tool_verify_decryption_success(void **state) {
+    (void)state;
+    cleanup_tool_outputs();
+
+    char in_path[] = "/tmp/inXXXXXX";
+    int ifd = mkstemp(in_path);
+    assert_true(ifd != -1);
+    FILE *f = fdopen(ifd, "wb");
+    assert_non_null(f);
+    const char *msg = "decrypt";
+    assert_int_equal(fwrite(msg, 1, strlen(msg), f), (int)strlen(msg));
+    fclose(f);
+
+    char out_path[] = "/tmp/outXXXXXX";
+    int ofd = mkstemp(out_path);
+    assert_true(ofd != -1);
+    close(ofd);
+
+    char cmd[PATH_MAX];
+    snprintf(cmd, sizeof(cmd), TOOL_PATH " -i %s -o %s", in_path, out_path);
+    int ret = system(cmd);
+    assert_true(ret != -1);
+    assert_true(WIFEXITED(ret));
+    assert_int_equal(WEXITSTATUS(ret), 0);
+
+    char dec_path[] = "/tmp/decXXXXXX";
+    int dfd = mkstemp(dec_path);
+    assert_true(dfd != -1);
+    close(dfd);
+
+    char verify_cmd[PATH_MAX * 2];
+    snprintf(verify_cmd, sizeof(verify_cmd),
+             TOOL_PATH " --verify-dec --expected-file %s --aes-key-path aes.bin --aes-iv aes_iv.bin -i %s -o %s",
+             in_path, out_path, dec_path);
+    ret = system(verify_cmd);
+    assert_true(ret != -1);
+    assert_true(WIFEXITED(ret));
+    assert_int_equal(WEXITSTATUS(ret), 0);
+
+    uint8_t *dec_buf = NULL;
+    size_t dec_len = 0;
+    assert_int_equal(read_file(dec_path, &dec_buf, &dec_len), 0);
+    assert_int_equal(dec_len, strlen(msg));
+    assert_memory_equal(dec_buf, msg, strlen(msg));
+    free(dec_buf);
+
+    cleanup_tool_outputs();
+    unlink(out_path);
+    char out_hex[PATH_MAX];
+    snprintf(out_hex, sizeof(out_hex), "%s.hex", out_path);
+    unlink(out_hex);
+    unlink(dec_path);
+    unlink(in_path);
+}
+
+/* Run decryption verification with mismatched plaintext and expect failure. */
+void test_tool_verify_decryption_failure(void **state) {
+    (void)state;
+    cleanup_tool_outputs();
+
+    char in_path[] = "/tmp/inXXXXXX";
+    int ifd = mkstemp(in_path);
+    assert_true(ifd != -1);
+    FILE *f = fdopen(ifd, "wb");
+    assert_non_null(f);
+    const char *msg = "original";
+    assert_int_equal(fwrite(msg, 1, strlen(msg), f), (int)strlen(msg));
+    fclose(f);
+
+    char out_path[] = "/tmp/outXXXXXX";
+    int ofd = mkstemp(out_path);
+    assert_true(ofd != -1);
+    close(ofd);
+
+    char cmd[PATH_MAX];
+    snprintf(cmd, sizeof(cmd), TOOL_PATH " -i %s -o %s", in_path, out_path);
+    int ret = system(cmd);
+    assert_true(ret != -1);
+    assert_true(WIFEXITED(ret));
+    assert_int_equal(WEXITSTATUS(ret), 0);
+
+    char wrong_path[] = "/tmp/wrongXXXXXX";
+    int wfd = mkstemp(wrong_path);
+    assert_true(wfd != -1);
+    f = fdopen(wfd, "wb");
+    assert_non_null(f);
+    const char *wrong = "tampered";
+    assert_int_equal(fwrite(wrong, 1, strlen(wrong), f), (int)strlen(wrong));
+    fclose(f);
+
+    char verify_cmd[PATH_MAX * 2];
+    snprintf(verify_cmd, sizeof(verify_cmd),
+             TOOL_PATH " --verify-dec --expected-file %s --aes-key-path aes.bin --aes-iv aes_iv.bin -i %s",
+             wrong_path, out_path);
+    ret = system(verify_cmd);
+    assert_true(ret != -1);
+    assert_true(WIFEXITED(ret));
+    assert_int_equal(WEXITSTATUS(ret), 1);
+
+    cleanup_tool_outputs();
+    unlink(out_path);
+    char out_hex[PATH_MAX];
+    snprintf(out_hex, sizeof(out_hex), "%s.hex", out_path);
+    unlink(out_hex);
+    unlink(in_path);
+    unlink(wrong_path);
+}
+
+
 const struct CMUnitTest cli_tests[] = {
     cmocka_unit_test(test_cli_invalid_alg),
     cmocka_unit_test(test_cli_invalid_bits),
@@ -289,6 +399,8 @@ const struct CMUnitTest cli_tests[] = {
     cmocka_unit_test(test_tool_gen_keypair_when_aes_provided),
     cmocka_unit_test(test_tool_gen_aes_when_keys_provided),
     cmocka_unit_test(test_tool_verify_signature),
+    cmocka_unit_test(test_tool_verify_decryption_success),
+    cmocka_unit_test(test_tool_verify_decryption_failure),
 };
 
 const size_t cli_tests_count = sizeof(cli_tests) / sizeof(cli_tests[0]);

@@ -21,6 +21,8 @@ extern "C" {
  * @aes_iv_path:  AES IV file path
  * @verify_sig:   non-zero to verify signatures instead of signing
  * @sig_path:     signature file path(s)
+ * @verify_dec:   non-zero to verify AES decryption instead of signing
+ * @expected_path: expected plaintext file for decryption verification
  */
 typedef struct {
     int alg;
@@ -33,6 +35,8 @@ typedef struct {
     const char *aes_iv_path;
     int verify_sig;
     const char *sig_path;
+    int verify_dec;
+    const char *expected_path;
 } cli_options;
 
 /**

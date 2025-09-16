@@ -135,3 +135,113 @@ cleanup:
     crypto_free_key(&pubs[1]);
     return ret;
 }
+
+int verify_dec_mode(const cli_options *opts)
+{
+    if (!opts || !opts->infile || !opts->expected_path ||
+        !opts->aes_key_path || !opts->aes_iv_path) {
+        fprintf(stderr, "Decryption verification requires input, expected file, key, and IV\n");
+        return 1;
+    }
+
+    int      ret             = 1;
+    uint8_t *cipher          = NULL;
+    size_t   cipher_len      = 0;
+    uint8_t *expected        = NULL;
+    size_t   expected_len    = 0;
+    uint8_t *plain           = NULL;
+    size_t   plain_len       = 0;
+    uint8_t *key_blob        = NULL;
+    size_t   key_blob_len    = 0;
+    uint8_t *iv_blob         = NULL;
+    size_t   iv_blob_len     = 0;
+    uint8_t  aes_key[CRYPTO_AES_MAX_KEY_SIZE];
+    uint8_t  iv[CRYPTO_AES_IV_SIZE];
+    size_t   key_bytes       = opts->aes_bits / 8;
+
+    if (read_file(opts->aes_key_path, &key_blob, &key_blob_len) != 0) {
+        fprintf(stderr, "Failed to read AES key file %s\n", opts->aes_key_path);
+        goto cleanup;
+    }
+    if (key_blob_len != key_bytes) {
+        fprintf(stderr,
+                "AES key file length (%zu) does not match selected key size (%zu bytes)\n",
+                key_blob_len, key_bytes);
+        goto cleanup;
+    }
+    memcpy(aes_key, key_blob, key_blob_len);
+    free(key_blob);
+    key_blob     = NULL;
+    key_blob_len = 0;
+
+    if (read_file(opts->aes_iv_path, &iv_blob, &iv_blob_len) != 0) {
+        fprintf(stderr, "Failed to read AES IV file %s\n", opts->aes_iv_path);
+        goto cleanup;
+    }
+    if (iv_blob_len != CRYPTO_AES_IV_SIZE) {
+        fprintf(stderr, "AES IV file must be %zu bytes\n", (size_t)CRYPTO_AES_IV_SIZE);
+        goto cleanup;
+    }
+    memcpy(iv, iv_blob, CRYPTO_AES_IV_SIZE);
+    free(iv_blob);
+    iv_blob     = NULL;
+    iv_blob_len = 0;
+
+    if (read_file(opts->infile, &cipher, &cipher_len) != 0) {
+        perror("input");
+        goto cleanup;
+    }
+    if (cipher_len == 0 || (cipher_len % CRYPTO_AES_IV_SIZE) != 0) {
+        fprintf(stderr, "Ciphertext length must be a positive multiple of %zu\n",
+                (size_t)CRYPTO_AES_IV_SIZE);
+        goto cleanup;
+    }
+
+    if (read_file(opts->expected_path, &expected, &expected_len) != 0) {
+        fprintf(stderr, "Failed to read expected file %s\n", opts->expected_path);
+        goto cleanup;
+    }
+
+    plain = malloc(cipher_len);
+    if (!plain) {
+        fprintf(stderr, "Out of memory\n");
+        goto cleanup;
+    }
+
+    if (crypto_decrypt_aescbc(aes_key, opts->aes_bits, iv, cipher, cipher_len,
+                              plain, &plain_len) != 0) {
+        fprintf(stderr, "AES decryption failed\n");
+        goto cleanup;
+    }
+
+    if (plain_len != expected_len || memcmp(plain, expected, plain_len) != 0) {
+        fprintf(stderr, "Decryption verification failed\n");
+        goto cleanup;
+    }
+
+    if (opts->outfile) {
+        FILE *out = fopen(opts->outfile, "wb");
+        if (!out) {
+            perror("output");
+            goto cleanup;
+        }
+        if (fwrite(plain, 1, plain_len, out) != plain_len) {
+            fprintf(stderr, "Failed to write decrypted output\n");
+            fclose(out);
+            goto cleanup;
+        }
+        fclose(out);
+        printf("Decrypted output written to %s\n", opts->outfile);
+    }
+
+    printf("Decryption verification succeeded\n");
+    ret = 0;
+
+cleanup:
+    free(cipher);
+    free(expected);
+    free(plain);
+    free(key_blob);
+    free(iv_blob);
+    return ret;
+}

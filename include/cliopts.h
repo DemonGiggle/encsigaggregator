@@ -19,6 +19,8 @@ extern "C" {
  * @sk_path:      private key file path
  * @aes_key_path: AES key file path
  * @aes_iv_path:  AES IV file path
+ * @verify_sig:   non-zero to verify signatures instead of signing
+ * @sig_path:     signature file path(s)
  */
 typedef struct {
     int alg;
@@ -29,6 +31,8 @@ typedef struct {
     const char *sk_path;
     const char *aes_key_path;
     const char *aes_iv_path;
+    int verify_sig;
+    const char *sig_path;
 } cli_options;
 
 /**

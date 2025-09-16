@@ -5,6 +5,7 @@
 #include "cliopts.h"
 #include "crypto.h"
 #include "hybrid_crypto.h"
+#include "verify_mode.h"
 #include "util.h"
 
 int main(int argc, char **argv)
@@ -12,6 +13,10 @@ int main(int argc, char **argv)
     cli_options opts;
     if (cli_parse_args(argc, argv, &opts) != 0) {
         return 1;
+    }
+
+    if (opts.verify_sig) {
+        return verify_sig_mode(&opts);
     }
 
     int have_pk = opts.pk_path && opts.sk_path;

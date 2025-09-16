@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "crypto.h"
+#include "cliopts.h"
 
 /**
  * read_file - read the entire file at path into a newly allocated buffer
@@ -40,5 +41,8 @@ int write_outputs(const char *out_path, int include_keys, int alg,
                   const uint8_t sigs[2][CRYPTO_MAX_SIG_SIZE],
                   const size_t sig_lens[2],
                   const uint8_t *enc, size_t enc_len);
+
+const char *crypto_alg_name(int alg);
+void print_run_options(const cli_options *opts, int generate_pk, int generate_aes);
 
 #endif /* UTIL_H */

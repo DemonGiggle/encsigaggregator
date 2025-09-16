@@ -23,7 +23,7 @@ int main(int argc, char **argv)
         return verify_dec_mode(&opts);
     }
 
-    int have_pk = opts.pk_path && opts.sk_path;
+    int have_pk  = opts.pk_path && opts.sk_path;
     int have_aes = opts.aes_key_path != NULL;
     if ((opts.pk_path && !opts.sk_path) || (!opts.pk_path && opts.sk_path)) {
         fprintf(stderr, "Both public and private key files must be specified\n");
@@ -33,8 +33,10 @@ int main(int argc, char **argv)
         fprintf(stderr, "AES key file must be specified when providing IV file\n");
         return 1;
     }
-    int generate_pk = !have_pk;
+    int generate_pk  = !have_pk;
     int generate_aes = !have_aes;
+
+    print_run_options(&opts, generate_pk, generate_aes);
     int include_keys = generate_pk || generate_aes;
 
     int ret = 1;

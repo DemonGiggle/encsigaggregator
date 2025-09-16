@@ -10,6 +10,43 @@
 #define PATH_MAX 4096
 #endif
 
+const char *crypto_alg_name(int alg)
+{
+    switch (alg) {
+    case CRYPTO_ALG_RSA4096:
+        return "rsa";
+    case CRYPTO_ALG_LMS:
+        return "lms";
+    case CRYPTO_ALG_MLDSA87:
+        return "mldsa87";
+    case CRYPTO_ALG_RSA4096_LMS:
+        return "rsa-lms";
+    case CRYPTO_ALG_RSA4096_MLDSA87:
+        return "rsa-mldsa87";
+    case CRYPTO_ALG_LMS_MLDSA87:
+        return "lms-mldsa87";
+    default:
+        return "unknown";
+    }
+}
+
+void print_run_options(const cli_options *opts, int generate_pk, int generate_aes)
+{
+    if (!opts) {
+        return;
+    }
+
+    const char *alg_name = crypto_alg_name(opts->alg);
+
+    printf("Run summary:\n");
+    printf("  Algorithm: %s\n", alg_name);
+    printf("  AES key bits: %zu\n", opts->aes_bits);
+    printf("  Signing keys: %s\n",
+           generate_pk ? "generated new key pair" : "using provided key pair");
+    printf("  AES material: %s\n",
+           generate_aes ? "generated new key and IV" : "using provided key and IV");
+}
+
 int read_file(const char *path, uint8_t **buf, size_t *len)
 {
     int ret = -1;

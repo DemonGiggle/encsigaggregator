@@ -59,14 +59,57 @@ static int append_component(output_component *entries, size_t *count,
 
 static void print_summary(const output_component *entries, size_t count)
 {
-    fprintf(stderr, "Output summary:\n[\n");
-    for (size_t i = 0; i < count; i++) {
-        fprintf(stderr,
-                "  {\"component\": \"%s\", \"bin\": \"%s\", \"hex\": \"%s\"}%s\n",
-                entries[i].component, entries[i].bin_path,
-                entries[i].hex_path, (i + 1 == count) ? "" : ",");
+    if (count == 0) {
+        fprintf(stderr, "Output summary:\n  (no components written)\n");
+        return;
     }
-    fprintf(stderr, "]\n");
+
+    size_t comp_width = strlen("Component");
+    size_t bin_width  = strlen("Binary file");
+    size_t hex_width  = strlen("Hex file");
+
+    for (size_t i = 0; i < count; i++) {
+        size_t len = strlen(entries[i].component);
+        if (len > comp_width) {
+            comp_width = len;
+        }
+        len = strlen(entries[i].bin_path);
+        if (len > bin_width) {
+            bin_width = len;
+        }
+        len = strlen(entries[i].hex_path);
+        if (len > hex_width) {
+            hex_width = len;
+        }
+    }
+
+    int comp_w = (comp_width > (size_t)INT_MAX) ? INT_MAX : (int)comp_width;
+    int bin_w  = (bin_width > (size_t)INT_MAX) ? INT_MAX : (int)bin_width;
+    int hex_w  = (hex_width > (size_t)INT_MAX) ? INT_MAX : (int)hex_width;
+
+    fprintf(stderr, "Output summary:\n");
+    fprintf(stderr, "  %-*s  %-*s  %-*s\n", comp_w, "Component", bin_w,
+            "Binary file", hex_w, "Hex file");
+
+    fprintf(stderr, "  ");
+    for (int i = 0; i < comp_w; i++) {
+        fputc('-', stderr);
+    }
+    fprintf(stderr, "  ");
+    for (int i = 0; i < bin_w; i++) {
+        fputc('-', stderr);
+    }
+    fprintf(stderr, "  ");
+    for (int i = 0; i < hex_w; i++) {
+        fputc('-', stderr);
+    }
+    fputc('\n', stderr);
+
+    for (size_t i = 0; i < count; i++) {
+        fprintf(stderr, "  %-*s  %-*s  %-*s\n", comp_w,
+                entries[i].component, bin_w, entries[i].bin_path, hex_w,
+                entries[i].hex_path);
+    }
 }
 
 int read_file(const char *path, uint8_t **buf, size_t *len)

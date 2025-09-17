@@ -10,6 +10,65 @@
 #define PATH_MAX 4096
 #endif
 
+#define MAX_OUTPUT_COMPONENTS 16
+
+typedef struct {
+    char component[32];
+    char bin_path[PATH_MAX];
+    char hex_path[PATH_MAX];
+} output_component;
+
+static int record_entry(output_component *entry, const char *name,
+                        const char *bin_path, const char *hex_path)
+{
+    int n;
+
+    n = snprintf(entry->component, sizeof(entry->component), "%s", name);
+    if (n < 0 || (size_t)n >= sizeof(entry->component)) {
+        return -1;
+    }
+
+    n = snprintf(entry->bin_path, sizeof(entry->bin_path), "%s", bin_path);
+    if (n < 0 || (size_t)n >= sizeof(entry->bin_path)) {
+        return -1;
+    }
+
+    n = snprintf(entry->hex_path, sizeof(entry->hex_path), "%s", hex_path);
+    if (n < 0 || (size_t)n >= sizeof(entry->hex_path)) {
+        return -1;
+    }
+
+    return 0;
+}
+
+static int append_component(output_component *entries, size_t *count,
+                            const char *name, const char *bin_path,
+                            const char *hex_path)
+{
+    if (*count >= MAX_OUTPUT_COMPONENTS) {
+        return -1;
+    }
+
+    if (record_entry(&entries[*count], name, bin_path, hex_path) != 0) {
+        return -1;
+    }
+
+    (*count)++;
+    return 0;
+}
+
+static void print_summary(const output_component *entries, size_t count)
+{
+    fprintf(stderr, "Output summary:\n[\n");
+    for (size_t i = 0; i < count; i++) {
+        fprintf(stderr,
+                "  {\"component\": \"%s\", \"bin\": \"%s\", \"hex\": \"%s\"}%s\n",
+                entries[i].component, entries[i].bin_path,
+                entries[i].hex_path, (i + 1 == count) ? "" : ",");
+    }
+    fprintf(stderr, "]\n");
+}
+
 int read_file(const char *path, uint8_t **buf, size_t *len)
 {
     int ret = -1;
@@ -79,7 +138,8 @@ static int write_bin_hex_pair(const char *bin_path, const char *hex_path,
     return 0;
 }
 
-static int write_component(const char *name, const uint8_t *data, size_t len)
+static int write_component(const char *name, const uint8_t *data, size_t len,
+                           output_component *entries, size_t *count)
 {
     char bin_path[PATH_MAX];
     char hex_path[PATH_MAX];
@@ -94,12 +154,11 @@ static int write_component(const char *name, const uint8_t *data, size_t len)
         return -1;
     }
 
-    int ret = write_bin_hex_pair(bin_path, hex_path, data, len);
-    if (ret == 0) {
-        printf("%s binary: %s\n", name, bin_path);
-        printf("%s hex: %s\n", name, hex_path);
+    if (write_bin_hex_pair(bin_path, hex_path, data, len) != 0) {
+        return -1;
     }
-    return ret;
+
+    return append_component(entries, count, name, bin_path, hex_path);
 }
 
 int write_outputs(const char *out_path, int include_keys, int alg,
@@ -112,89 +171,100 @@ int write_outputs(const char *out_path, int include_keys, int alg,
 {
     char hex_path[PATH_MAX];
     int n;
+    output_component outputs[MAX_OUTPUT_COMPONENTS];
+    size_t output_count = 0;
+    crypto_key priv_blobs[2] = {{0}};
+    crypto_key pub_blobs[2] = {{0}};
+    int result = -1;
 
     n = snprintf(hex_path, sizeof(hex_path), "%s.hex", out_path);
     if (n < 0 || (size_t)n >= sizeof(hex_path)) {
-        return -1;
+        goto cleanup;
     }
 
     if (write_bin_hex_pair(out_path, hex_path, enc, enc_len) != 0) {
-        return -1;
+        goto cleanup;
     }
 
-    printf("ciphertext binary: %s\n", out_path);
-    printf("ciphertext hex: %s\n", hex_path);
+    if (append_component(outputs, &output_count, "ciphertext", out_path,
+                         hex_path) != 0) {
+        goto cleanup;
+    }
 
     int hybrid = crypto_is_hybrid_alg(alg);
+    if (write_component("sig0", sigs[0], sig_lens[0], outputs,
+                        &output_count) != 0) {
+        goto cleanup;
+    }
     if (hybrid) {
-        if (write_component("sig0", sigs[0], sig_lens[0]) != 0) {
-            return -1;
-        }
-        if (write_component("sig1", sigs[1], sig_lens[1]) != 0) {
-            return -1;
-        }
-    } else {
-        if (write_component("sig0", sigs[0], sig_lens[0]) != 0) {
-            return -1;
+        if (write_component("sig1", sigs[1], sig_lens[1], outputs,
+                            &output_count) != 0) {
+            goto cleanup;
         }
     }
 
     if (include_keys) {
-        int ret = 0;
-        crypto_key priv_blobs[2] = {{0}};
-        crypto_key pub_blobs[2] = {{0}};
-
-        if (write_component("aes_iv", iv, CRYPTO_AES_IV_SIZE) != 0) {
-            goto error;
+        if (write_component("aes_iv", iv, CRYPTO_AES_IV_SIZE, outputs,
+                            &output_count) != 0) {
+            goto cleanup;
         }
-        if (write_component("aes", aes_key, aes_key_len) != 0) {
-            goto error;
+        if (write_component("aes", aes_key, aes_key_len, outputs,
+                            &output_count) != 0) {
+            goto cleanup;
         }
 
         if (hybrid) {
             if (hybrid_crypto_export_keypairs((hybrid_alg)alg, privs, pubs,
                                               priv_blobs, pub_blobs) != 0) {
-                goto error;
+                goto cleanup;
             }
-            if (write_component("sk0", priv_blobs[0].key, priv_blobs[0].key_len) != 0) {
-                goto error;
+            if (write_component("sk0", priv_blobs[0].key,
+                                priv_blobs[0].key_len, outputs,
+                                &output_count) != 0) {
+                goto cleanup;
             }
-            if (write_component("sk1", priv_blobs[1].key, priv_blobs[1].key_len) != 0) {
-                goto error;
+            if (write_component("sk1", priv_blobs[1].key,
+                                priv_blobs[1].key_len, outputs,
+                                &output_count) != 0) {
+                goto cleanup;
             }
-            if (write_component("pk0", pub_blobs[0].key, pub_blobs[0].key_len) != 0) {
-                goto error;
+            if (write_component("pk0", pub_blobs[0].key,
+                                pub_blobs[0].key_len, outputs,
+                                &output_count) != 0) {
+                goto cleanup;
             }
-            if (write_component("pk1", pub_blobs[1].key, pub_blobs[1].key_len) != 0) {
-                goto error;
+            if (write_component("pk1", pub_blobs[1].key,
+                                pub_blobs[1].key_len, outputs,
+                                &output_count) != 0) {
+                goto cleanup;
             }
         } else {
             if (crypto_export_keypair((crypto_alg)alg, &privs[0], &pubs[0],
                                       &priv_blobs[0], &pub_blobs[0]) != 0) {
-                goto error;
+                goto cleanup;
             }
             if (write_component("sk0", priv_blobs[0].key,
-                                priv_blobs[0].key_len) != 0) {
-                goto error;
+                                priv_blobs[0].key_len, outputs,
+                                &output_count) != 0) {
+                goto cleanup;
             }
             if (write_component("pk0", pub_blobs[0].key,
-                                pub_blobs[0].key_len) != 0) {
-                goto error;
+                                pub_blobs[0].key_len, outputs,
+                                &output_count) != 0) {
+                goto cleanup;
             }
         }
-        goto cleanup;
-
-    error:
-        ret = -1;
-
-    cleanup:
-        free(priv_blobs[0].key);
-        free(priv_blobs[1].key);
-        free(pub_blobs[0].key);
-        free(pub_blobs[1].key);
-        if (ret != 0) {
-            return -1;
-        }
     }
-    return 0;
+
+    result = 0;
+
+cleanup:
+    free(priv_blobs[0].key);
+    free(priv_blobs[1].key);
+    free(pub_blobs[0].key);
+    free(pub_blobs[1].key);
+    if (result == 0) {
+        print_summary(outputs, output_count);
+    }
+    return result;
 }

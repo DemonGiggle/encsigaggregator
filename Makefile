@@ -31,20 +31,22 @@ MBEDTLS_LIBS = $(MBEDTLS_DIR)/library/libmbedtls.a \
                $(MBEDTLS_DIR)/library/libmbedcrypto.a \
                $(MBEDTLS_DIR)/library/libmbedx509.a
 PQ_LIB = $(PQCLEAN_DIR)/crypto_sign/ml-dsa-87/clean/libml-dsa-87_clean.a
+THIRD_PARTY_STAMP = libs/.third_party_built
 
 all: $(MBEDTLS_LIBS) $(PQ_LIB) libcrypto.a $(TOOL_NAME)
 
-$(MBEDTLS_LIBS):
-	$(MAKE) -C $(MBEDTLS_DIR) library
+$(THIRD_PARTY_STAMP): scripts/install_third_party.sh
+	./scripts/install_third_party.sh
+	touch $@
 
-$(PQ_LIB):
-	$(MAKE) -C $(PQCLEAN_DIR)/crypto_sign/ml-dsa-87/clean
+$(MBEDTLS_LIBS) $(PQ_LIB): $(THIRD_PARTY_STAMP)
+	@true
 	
 libcrypto.a: $(OBJ)
 	ar rcs $@ $^
 
 clean:
-	rm -f $(OBJ) $(TOOL_OBJ) $(TEST_OBJ) libcrypto.a $(TOOL_NAME) $(TEST_BIN)
+	rm -f $(OBJ) $(TOOL_OBJ) $(TEST_OBJ) libcrypto.a $(TOOL_NAME) $(TEST_BIN) $(THIRD_PARTY_STAMP)
 
 $(TOOL_NAME): libcrypto.a $(TOOL_OBJ)
 	$(CC) $(CFLAGS) -o $@ $(TOOL_OBJ) -Wl,--start-group libcrypto.a $(LDFLAGS) -Wl,--end-group

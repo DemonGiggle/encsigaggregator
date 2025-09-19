@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#include <errno.h>
+#include <unistd.h>
 #ifndef PATH_MAX
 #define PATH_MAX 4096
 #endif
@@ -54,6 +56,111 @@ static int append_component(output_component *entries, size_t *count,
     }
 
     (*count)++;
+    return 0;
+}
+
+static int ensure_not_exists(const char *path)
+{
+    if (access(path, F_OK) == 0) {
+        errno = EEXIST;
+        return -1;
+    }
+
+    if (errno != ENOENT) {
+        return -1;
+    }
+
+    errno = 0;
+    return 0;
+}
+
+static int ensure_component_paths_free(const char *name)
+{
+    char bin_path[PATH_MAX];
+    char hex_path[PATH_MAX];
+    int  n;
+
+    n = snprintf(bin_path, sizeof(bin_path), "%s.bin", name);
+    if (n < 0 || (size_t)n >= sizeof(bin_path)) {
+        return -1;
+    }
+
+    n = snprintf(hex_path, sizeof(hex_path), "%s.hex", name);
+    if (n < 0 || (size_t)n >= sizeof(hex_path)) {
+        return -1;
+    }
+
+    if (ensure_not_exists(bin_path) != 0) {
+        return -1;
+    }
+
+    if (ensure_not_exists(hex_path) != 0) {
+        return -1;
+    }
+
+    return 0;
+}
+
+int ensure_outputs_not_exist(const char *out_path, int include_keys, int alg)
+{
+    char hex_path[PATH_MAX];
+    int n;
+
+    if (out_path == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    n = snprintf(hex_path, sizeof(hex_path), "%s.hex", out_path);
+    if (n < 0 || (size_t)n >= sizeof(hex_path)) {
+        return -1;
+    }
+
+    if (ensure_not_exists(out_path) != 0) {
+        return -1;
+    }
+
+    if (ensure_not_exists(hex_path) != 0) {
+        return -1;
+    }
+
+    if (ensure_component_paths_free("sig0") != 0) {
+        return -1;
+    }
+
+    int hybrid = crypto_is_hybrid_alg(alg);
+    if (hybrid) {
+        if (ensure_component_paths_free("sig1") != 0) {
+            return -1;
+        }
+    }
+
+    if (!include_keys) {
+        return 0;
+    }
+
+    if (ensure_component_paths_free("aes_iv") != 0) {
+        return -1;
+    }
+
+    if (ensure_component_paths_free("aes") != 0) {
+        return -1;
+    }
+
+    if (hybrid) {
+        if (ensure_component_paths_free("sk0") != 0 ||
+            ensure_component_paths_free("sk1") != 0 ||
+            ensure_component_paths_free("pk0") != 0 ||
+            ensure_component_paths_free("pk1") != 0) {
+            return -1;
+        }
+    } else {
+        if (ensure_component_paths_free("sk0") != 0 ||
+            ensure_component_paths_free("pk0") != 0) {
+            return -1;
+        }
+    }
+
     return 0;
 }
 

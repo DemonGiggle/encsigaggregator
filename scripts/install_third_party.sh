@@ -7,6 +7,18 @@ MBEDTLS_DIR="$ROOT_DIR/libs/mbedtls"
 PQCLEAN_DIR="$ROOT_DIR/libs/pqclean"
 CONFIG_FILE="$ROOT_DIR/include/mbedtls_custom_config.h"
 
+# Ensure the Python dependencies required by the Mbed TLS build are present.
+ensure_python_dep() {
+    MODULE="$1"
+    PACKAGE="${2:-$1}"
+    if ! python3 -c "import $MODULE" >/dev/null 2>&1; then
+        python3 -m pip install --user "$PACKAGE"
+    fi
+}
+
+ensure_python_dep jsonschema
+ensure_python_dep jinja2
+
 # Clone mbedtls v3.6.0 if not present
 if [ ! -d "$MBEDTLS_DIR/.git" ]; then
     rm -rf "$MBEDTLS_DIR"

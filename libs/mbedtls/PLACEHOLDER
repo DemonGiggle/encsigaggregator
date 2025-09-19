@@ -1,0 +1,2 @@
+This placeholder keeps the mbedtls directory in the repository. Run
+scripts/install_third_party.sh to populate it with the actual library sources.

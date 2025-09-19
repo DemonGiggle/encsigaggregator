@@ -39,6 +39,11 @@ int main(int argc, char **argv)
     print_run_options(&opts, generate_pk, generate_aes);
     int include_keys = generate_pk || generate_aes;
 
+    if (ensure_outputs_not_exist(opts.outfile, include_keys, opts.alg) != 0) {
+        perror("output");
+        return 1;
+    }
+
     int ret = 1;
     uint8_t *buf = NULL;
     uint8_t (*sigs)[CRYPTO_MAX_SIG_SIZE] = NULL;

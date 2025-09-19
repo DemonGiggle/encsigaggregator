@@ -124,41 +124,27 @@ int ensure_outputs_not_exist(const char *out_path, int include_keys, int alg)
         return -1;
     }
 
-    if (ensure_component_paths_free("sig0") != 0) {
-        return -1;
-    }
-
     int hybrid = crypto_is_hybrid_alg(alg);
-    if (hybrid) {
-        if (ensure_component_paths_free("sig1") != 0) {
-            return -1;
-        }
+    if (ensure_component_paths_free("sig0") != 0 ||
+        (hybrid && ensure_component_paths_free("sig1") != 0)) {
+        return -1;
     }
 
     if (!include_keys) {
         return 0;
     }
 
-    if (ensure_component_paths_free("aes_iv") != 0) {
+    if (ensure_component_paths_free("aes_iv") != 0 ||
+        ensure_component_paths_free("aes") != 0 ||
+        ensure_component_paths_free("sk0") != 0 ||
+        ensure_component_paths_free("pk0") != 0) {
         return -1;
     }
 
-    if (ensure_component_paths_free("aes") != 0) {
+    if (hybrid &&
+        (ensure_component_paths_free("sk1") != 0 ||
+         ensure_component_paths_free("pk1") != 0)) {
         return -1;
-    }
-
-    if (hybrid) {
-        if (ensure_component_paths_free("sk0") != 0 ||
-            ensure_component_paths_free("sk1") != 0 ||
-            ensure_component_paths_free("pk0") != 0 ||
-            ensure_component_paths_free("pk1") != 0) {
-            return -1;
-        }
-    } else {
-        if (ensure_component_paths_free("sk0") != 0 ||
-            ensure_component_paths_free("pk0") != 0) {
-            return -1;
-        }
     }
 
     return 0;

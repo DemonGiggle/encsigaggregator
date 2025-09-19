@@ -8,8 +8,10 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
 #include <limits.h>
 
 #ifndef TOOL_NAME
@@ -111,9 +113,102 @@ void test_cli_lms_mldsa(void **state) {
     assert_int_equal(opts.alg, CRYPTO_ALG_LMS_MLDSA87);
 }
 
+/* Refuse to overwrite ciphertext when the requested output path already exists. */
+void test_tool_fails_when_ciphertext_exists(void **state) {
+    (void)state;
+    cleanup_tool_outputs();
+
+    char in_path[] = "/tmp/inXXXXXX";
+    int ifd = mkstemp(in_path);
+    assert_true(ifd != -1);
+    FILE *f = fdopen(ifd, "wb");
+    assert_non_null(f);
+    const char *msg = "data";
+    assert_int_equal(fwrite(msg, 1, strlen(msg), f), (int)strlen(msg));
+    fclose(f);
+
+    char out_path[] = "/tmp/outXXXXXX";
+    int ofd = mkstemp(out_path);
+    assert_true(ofd != -1);
+    close(ofd);
+
+    char cmd[PATH_MAX];
+    snprintf(cmd, sizeof(cmd), TOOL_PATH " -i %s -o %s", in_path, out_path);
+    int ret = system(cmd);
+    assert_true(ret != -1);
+    assert_true(WIFEXITED(ret));
+    assert_int_equal(WEXITSTATUS(ret), 1);
+
+    struct stat st;
+    assert_int_equal(stat(out_path, &st), 0);
+    assert_int_equal(st.st_size, 0);
+
+    char hex_path[PATH_MAX];
+    snprintf(hex_path, sizeof(hex_path), "%s.hex", out_path);
+    assert_int_equal(access(hex_path, F_OK), -1);
+
+    cleanup_tool_outputs();
+    unlink(out_path);
+    unlink(hex_path);
+    unlink(in_path);
+}
+
+/* Refuse to overwrite an existing signature component before signing begins. */
+void test_tool_fails_when_component_exists(void **state) {
+    (void)state;
+    cleanup_tool_outputs();
+
+    char in_path[] = "/tmp/inXXXXXX";
+    int ifd = mkstemp(in_path);
+    assert_true(ifd != -1);
+    FILE *f = fdopen(ifd, "wb");
+    assert_non_null(f);
+    const char *msg = "data";
+    assert_int_equal(fwrite(msg, 1, strlen(msg), f), (int)strlen(msg));
+    fclose(f);
+
+    char out_path[] = "/tmp/outXXXXXX";
+    int ofd = mkstemp(out_path);
+    assert_true(ofd != -1);
+    close(ofd);
+    unlink(out_path);
+
+    uint8_t existing[4] = {0xaa, 0xbb, 0xcc, 0xdd};
+    f = fopen("sig0.bin", "wb");
+    assert_non_null(f);
+    assert_int_equal(fwrite(existing, 1, sizeof(existing), f), (int)sizeof(existing));
+    fclose(f);
+
+    char cmd[PATH_MAX];
+    snprintf(cmd, sizeof(cmd), TOOL_PATH " -i %s -o %s", in_path, out_path);
+    int ret = system(cmd);
+    assert_true(ret != -1);
+    assert_true(WIFEXITED(ret));
+    assert_int_equal(WEXITSTATUS(ret), 1);
+
+    f = fopen("sig0.bin", "rb");
+    assert_non_null(f);
+    uint8_t buffer[sizeof(existing)] = {0};
+    assert_int_equal(fread(buffer, 1, sizeof(buffer), f), (int)sizeof(buffer));
+    fclose(f);
+    assert_memory_equal(buffer, existing, sizeof(existing));
+
+    assert_int_equal(access(out_path, F_OK), -1);
+    char hex_path[PATH_MAX];
+    snprintf(hex_path, sizeof(hex_path), "%s.hex", out_path);
+    assert_int_equal(access(hex_path, F_OK), -1);
+    assert_int_equal(access("sig0.hex", F_OK), -1);
+
+    cleanup_tool_outputs();
+    unlink(out_path);
+    unlink(hex_path);
+    unlink(in_path);
+}
+
 /* Generate key pair when only AES material is provided. */
 void test_tool_gen_keypair_when_aes_provided(void **state) {
     (void)state;
+    cleanup_tool_outputs();
     uint8_t key[CRYPTO_AES_MAX_KEY_SIZE];
     uint8_t iv[CRYPTO_AES_IV_SIZE];
     assert_int_equal(crypto_init_aes(CRYPTO_AES_KEY_BITS_256, NULL, NULL, key, iv), 0);
@@ -146,6 +241,7 @@ void test_tool_gen_keypair_when_aes_provided(void **state) {
     int ofd = mkstemp(out_path);
     assert_true(ofd != -1);
     close(ofd);
+    unlink(out_path);
 
     char cmd[PATH_MAX];
     snprintf(cmd, sizeof(cmd), TOOL_PATH " -i %s -o %s --aes-key-path %s --aes-iv %s",
@@ -170,6 +266,7 @@ void test_tool_gen_keypair_when_aes_provided(void **state) {
 /* Generate AES material when only key pair is provided. */
 void test_tool_gen_aes_when_keys_provided(void **state) {
     (void)state;
+    cleanup_tool_outputs();
     crypto_key priv = {0}, pub = {0};
     assert_int_equal(crypto_keygen(CRYPTO_ALG_RSA4096, &priv, &pub), 0);
     crypto_key priv_blob = {0}, pub_blob = {0};
@@ -203,6 +300,7 @@ void test_tool_gen_aes_when_keys_provided(void **state) {
     int ofd = mkstemp(out_path);
     assert_true(ofd != -1);
     close(ofd);
+    unlink(out_path);
 
     char cmd[PATH_MAX];
     snprintf(cmd, sizeof(cmd), TOOL_PATH " -i %s -o %s --pk-path %s --sk-path %s",
@@ -246,6 +344,7 @@ void test_tool_verify_signature(void **state) {
     int ofd = mkstemp(out_path);
     assert_true(ofd != -1);
     close(ofd);
+    unlink(out_path);
 
     char cmd[PATH_MAX];
     snprintf(cmd, sizeof(cmd), TOOL_PATH " -i %s -o %s", in_path, out_path);
@@ -294,6 +393,7 @@ void test_tool_verify_decryption_success(void **state) {
     int ofd = mkstemp(out_path);
     assert_true(ofd != -1);
     close(ofd);
+    unlink(out_path);
 
     char cmd[PATH_MAX];
     snprintf(cmd, sizeof(cmd), TOOL_PATH " -i %s -o %s", in_path, out_path);
@@ -306,6 +406,7 @@ void test_tool_verify_decryption_success(void **state) {
     int dfd = mkstemp(dec_path);
     assert_true(dfd != -1);
     close(dfd);
+    unlink(dec_path);
 
     char verify_cmd[PATH_MAX * 2];
     snprintf(verify_cmd, sizeof(verify_cmd),
@@ -350,6 +451,7 @@ void test_tool_verify_decryption_failure(void **state) {
     int ofd = mkstemp(out_path);
     assert_true(ofd != -1);
     close(ofd);
+    unlink(out_path);
 
     char cmd[PATH_MAX];
     snprintf(cmd, sizeof(cmd), TOOL_PATH " -i %s -o %s", in_path, out_path);
@@ -396,6 +498,8 @@ const struct CMUnitTest cli_tests[] = {
     cmocka_unit_test(test_cli_rsa_lms),
     cmocka_unit_test(test_cli_rsa_mldsa),
     cmocka_unit_test(test_cli_lms_mldsa),
+    cmocka_unit_test(test_tool_fails_when_ciphertext_exists),
+    cmocka_unit_test(test_tool_fails_when_component_exists),
     cmocka_unit_test(test_tool_gen_keypair_when_aes_provided),
     cmocka_unit_test(test_tool_gen_aes_when_keys_provided),
     cmocka_unit_test(test_tool_verify_signature),

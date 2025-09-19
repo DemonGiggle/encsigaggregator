@@ -16,6 +16,16 @@
 int read_file(const char *path, uint8_t **buf, size_t *len);
 
 /**
+ * ensure_outputs_not_exist - verify that all expected output files are absent
+ * @out_path: base output path for ciphertext
+ * @include_keys: non-zero when key and AES component files will be produced
+ * @alg: signing algorithm that determines hybrid component requirements
+ *
+ * Return: 0 when no expected output files are present, -1 otherwise.
+ */
+int ensure_outputs_not_exist(const char *out_path, int include_keys, int alg);
+
+/**
  * write_outputs - write encrypted data, signature, and optional keys to files
  * @out_path: output file path
  * @include_keys: non-zero to include keys

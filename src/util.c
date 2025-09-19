@@ -125,8 +125,11 @@ int ensure_outputs_not_exist(const char *out_path, int include_keys, int alg)
     }
 
     int hybrid = crypto_is_hybrid_alg(alg);
-    if (ensure_component_paths_free("sig0") != 0 ||
-        (hybrid && ensure_component_paths_free("sig1") != 0)) {
+    if (ensure_component_paths_free("sig0") != 0) {
+        return -1;
+    }
+
+    if (hybrid && ensure_component_paths_free("sig1") != 0) {
         return -1;
     }
 

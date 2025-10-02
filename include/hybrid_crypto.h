@@ -47,7 +47,7 @@ int hybrid_crypto_export_keypairs(hybrid_alg alg, const crypto_key privs[2],
  * Return: 0 on success, -1 on error.
  */
 int hybrid_crypto_export_pk(hybrid_alg alg, const crypto_key pubs[2],
-                            uint8_t **out_pks, size_t out_lens[2]);
+                            uint8_t *out_pks[2], size_t out_lens[2]);
 
 #ifdef __cplusplus
 }

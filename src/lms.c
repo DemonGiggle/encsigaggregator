@@ -225,6 +225,29 @@ int lms_export_keypair(const crypto_key *priv, const crypto_key *pub,
     return 0;
 }
 
+int lms_export_raw_pk(const crypto_key *pub, uint8_t **out_pk, size_t *out_len) {
+    if (!pub || !out_pk || !out_len || pub->alg != CRYPTO_ALG_LMS ||
+        pub->type != CRYPTO_KEY_TYPE_PUBLIC || !pub->key) {
+        return -1;
+    }
+    const mbedtls_lms_public_t *pu = pub->key;
+    size_t pub_len = MBEDTLS_LMS_PUBLIC_KEY_LEN(
+        pu->MBEDTLS_PRIVATE(params).MBEDTLS_PRIVATE(type));
+    uint8_t *buf = malloc(pub_len);
+    if (!buf) {
+        return -1;
+    }
+    size_t olen = 0;
+    if (mbedtls_lms_export_public_key(pu, buf, pub_len, &olen) != 0 ||
+        olen != pub_len) {
+        free(buf);
+        return -1;
+    }
+    *out_pk  = buf;
+    *out_len = pub_len;
+    return 0;
+}
+
 void lms_free_key(crypto_key *key) {
     if (!key || key->alg != CRYPTO_ALG_LMS || !key->key) {
         return;

@@ -4,6 +4,8 @@
 #include <mbedtls/pk.h>
 #include <mbedtls/rsa.h>
 #include <mbedtls/md.h>
+#include <mbedtls/bignum.h>
+#include <mbedtls/private_access.h>
 #include "util.h"
 
 /* Maximum size of a DER-encoded RSA key we expect to handle */
@@ -177,6 +179,30 @@ int rsa_export_keypair(const crypto_key *priv, const crypto_key *pub,
     out_pub->key_len = len;
     out_pub->alg     = CRYPTO_ALG_RSA4096;
     out_pub->type    = CRYPTO_KEY_TYPE_PUBLIC;
+    return 0;
+}
+
+int rsa_export_raw_pk(const crypto_key *pub, uint8_t **out_pk, size_t *out_len) {
+    if (!pub || !out_pk || !out_len || pub->alg != CRYPTO_ALG_RSA4096 ||
+        pub->type != CRYPTO_KEY_TYPE_PUBLIC || !pub->key) {
+        return -1;
+    }
+    mbedtls_pk_context *pk = pub->key;
+    if (mbedtls_pk_get_type(pk) != MBEDTLS_PK_RSA) {
+        return -1;
+    }
+    mbedtls_rsa_context *rsa = mbedtls_pk_rsa(*pk);
+    size_t len = mbedtls_rsa_get_len(rsa);
+    uint8_t *buf = malloc(len);
+    if (!buf) {
+        return -1;
+    }
+    if (mbedtls_mpi_write_binary_le(&rsa->MBEDTLS_PRIVATE(N), buf, len) != 0) {
+        free(buf);
+        return -1;
+    }
+    *out_pk  = buf;
+    *out_len = len;
     return 0;
 }
 

@@ -37,6 +37,18 @@ int hybrid_crypto_export_keypairs(hybrid_alg alg, const crypto_key privs[2],
                                   crypto_key out_privs[2],
                                   crypto_key out_pubs[2]);
 
+/**
+ * hybrid_crypto_export_pk - export raw public keys for a hybrid algorithm
+ * @alg: hybrid algorithm identifier
+ * @pubs: array of two public keys corresponding to @alg
+ * @out_pks: output array of two pointers that will receive allocated buffers
+ * @out_lens: output array of lengths for each public key buffer
+ *
+ * Return: 0 on success, -1 on error.
+ */
+int hybrid_crypto_export_pk(hybrid_alg alg, const crypto_key pubs[2],
+                            uint8_t **out_pks, size_t out_lens[2]);
+
 #ifdef __cplusplus
 }
 #endif

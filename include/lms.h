@@ -67,6 +67,16 @@ int lms_export_keypair(const crypto_key *priv, const crypto_key *pub,
                        crypto_key *out_priv, crypto_key *out_pub);
 
 /**
+ * lms_export_raw_pk - export the raw bytes of an LMS public key
+ * @pub: public key to export
+ * @out_pk: on success, pointer to allocated buffer with key bytes
+ * @out_len: on success, length of the exported buffer
+ *
+ * Return: 0 on success, -1 on error.
+ */
+int lms_export_raw_pk(const crypto_key *pub, uint8_t **out_pk, size_t *out_len);
+
+/**
  * lms_free_key - release resources associated with an LMS key
  * @key: key to free
  */

@@ -196,6 +196,18 @@ int crypto_export_keypair(crypto_alg alg, const crypto_key *priv,
                           crypto_key *out_pub);
 
 /**
+ * crypto_export_raw_pk - export the raw public key bytes for an algorithm
+ * @alg: algorithm identifier
+ * @pub: public key to export
+ * @out_pk: on success, pointer to a newly allocated buffer containing the key
+ * @out_len: on success, length of the exported key buffer
+ *
+ * Return: 0 on success, -1 on error.
+ */
+int crypto_export_raw_pk(crypto_alg alg, const crypto_key *pub,
+                         uint8_t **out_pk, size_t *out_len);
+
+/**
  * crypto_free_key - release any resources held by a key
  * @key: key to free
  */

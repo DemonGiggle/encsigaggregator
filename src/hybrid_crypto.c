@@ -211,4 +211,29 @@ int hybrid_crypto_export_keypairs(hybrid_alg alg, const crypto_key privs[2],
     return 0;
 }
 
+int hybrid_crypto_export_pk(hybrid_alg alg, const crypto_key pubs[2],
+                            uint8_t **out_pks, size_t out_lens[2])
+{
+    if (!pubs || !out_pks || !out_lens) {
+        return -1;
+    }
+    crypto_alg first, second;
+    if (crypto_hybrid_get_algs(alg, &first, &second) != 0) {
+        return -1;
+    }
+    if (pubs[0].alg != first || pubs[1].alg != second) {
+        return -1;
+    }
+    if (crypto_export_raw_pk(first, &pubs[0], &out_pks[0], &out_lens[0]) != 0) {
+        return -1;
+    }
+    if (crypto_export_raw_pk(second, &pubs[1], &out_pks[1], &out_lens[1]) != 0) {
+        free(out_pks[0]);
+        out_pks[0]  = NULL;
+        out_lens[0] = 0;
+        return -1;
+    }
+    return 0;
+}
+
 

@@ -111,6 +111,21 @@ int mldsa_export_keypair(const crypto_key *priv, const crypto_key *pub,
     return 0;
 }
 
+int mldsa_export_raw_pk(const crypto_key *pub, uint8_t **out_pk, size_t *out_len) {
+    if (!pub || !out_pk || !out_len || pub->alg != CRYPTO_ALG_MLDSA87 ||
+        pub->type != CRYPTO_KEY_TYPE_PUBLIC || !pub->key) {
+        return -1;
+    }
+    uint8_t *buf = malloc(pub->key_len);
+    if (!buf) {
+        return -1;
+    }
+    memcpy(buf, pub->key, pub->key_len);
+    *out_pk  = buf;
+    *out_len = pub->key_len;
+    return 0;
+}
+
 void mldsa_free_key(crypto_key *key) {
     if (!key || key->alg != CRYPTO_ALG_MLDSA87 || !key->key) {
         return;

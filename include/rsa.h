@@ -67,6 +67,16 @@ int rsa_export_keypair(const crypto_key *priv, const crypto_key *pub,
                        crypto_key *out_priv, crypto_key *out_pub);
 
 /**
+ * rsa_export_raw_pk - export the raw modulus of an RSA public key
+ * @pub: public key to export
+ * @out_pk: on success, pointer to allocated buffer with key bytes
+ * @out_len: on success, length of the exported buffer
+ *
+ * Return: 0 on success, -1 on error.
+ */
+int rsa_export_raw_pk(const crypto_key *pub, uint8_t **out_pk, size_t *out_len);
+
+/**
  * rsa_free_key - release resources associated with an RSA key
  * @key: key to free
  */

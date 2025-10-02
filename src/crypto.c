@@ -350,6 +350,22 @@ int crypto_export_keypair(crypto_alg alg, const crypto_key *priv,
     return export_simple(alg, priv, pub, out_priv, out_pub);
 }
 
+int crypto_export_raw_pk(crypto_alg alg, const crypto_key *pub,
+                         uint8_t **out_pk, size_t *out_len)
+{
+    if (!pub || !out_pk || !out_len) {
+        return -1;
+    }
+    if (alg == CRYPTO_ALG_RSA4096) {
+        return rsa_export_raw_pk(pub, out_pk, out_len);
+    } else if (alg == CRYPTO_ALG_LMS) {
+        return lms_export_raw_pk(pub, out_pk, out_len);
+    } else if (alg == CRYPTO_ALG_MLDSA87) {
+        return mldsa_export_raw_pk(pub, out_pk, out_len);
+    }
+    return -1;
+}
+
 void crypto_free_key(crypto_key *key)
 {
     if (!key || !key->key) {

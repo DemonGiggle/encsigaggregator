@@ -1,6 +1,9 @@
 #define _POSIX_C_SOURCE 200809L /* for mkstemp and related functions */
 #include "crypto.h"
 #include "hybrid_crypto.h"
+#include "rsa.h"
+#include "lms.h"
+#include "mldsa.h"
 #include "util.h"
 #include <stdarg.h>
 #include <setjmp.h>
@@ -15,6 +18,8 @@
 #include <mbedtls/lms.h>
 #include <mbedtls/private_access.h>
 #include <mbedtls/pk.h>
+#include <mbedtls/rsa.h>
+#include <mbedtls/bignum.h>
 #include <stdio.h>
 #include <unistd.h>
 #include "api.h"
@@ -388,6 +393,46 @@ static void test_lms_mldsa_sign_verify(void **state) {
     assert_int_equal(hybrid_crypto_verify(CRYPTO_ALG_LMS_MLDSA87, pubs,
                                           msg, sizeof(msg) - 1,
                                           sigs3, sig_lens3), 0);
+    crypto_free_key(&privs[0]);
+    crypto_free_key(&privs[1]);
+    crypto_free_key(&pubs[0]);
+    crypto_free_key(&pubs[1]);
+}
+
+/* Export raw public keys for a hybrid algorithm */
+static void test_hybrid_export_raw_pk(void **state) {
+    (void)state;
+    crypto_key privs[2] = {{0}};
+    crypto_key pubs[2] = {{0}};
+    assert_int_equal(hybrid_crypto_keygen(CRYPTO_ALG_RSA4096_MLDSA87, privs, pubs), 0);
+
+    uint8_t *out_pks[2] = {NULL, NULL};
+    size_t out_lens[2] = {0, 0};
+    assert_int_equal(hybrid_crypto_export_pk(CRYPTO_ALG_RSA4096_MLDSA87, pubs,
+                                             out_pks, out_lens), 0);
+    assert_non_null(out_pks[0]);
+    assert_non_null(out_pks[1]);
+    assert_int_equal(out_lens[0], CRYPTO_RSA_BITS / 8);
+    assert_int_equal(out_lens[1], PQCLEAN_MLDSA87_CLEAN_CRYPTO_PUBLICKEYBYTES);
+
+    uint8_t *rsa_raw = NULL;
+    size_t rsa_raw_len = 0;
+    assert_int_equal(crypto_export_raw_pk(CRYPTO_ALG_RSA4096, &pubs[0],
+                                          &rsa_raw, &rsa_raw_len), 0);
+    assert_int_equal(rsa_raw_len, out_lens[0]);
+    assert_memory_equal(rsa_raw, out_pks[0], out_lens[0]);
+
+    uint8_t *mldsa_raw = NULL;
+    size_t mldsa_raw_len = 0;
+    assert_int_equal(crypto_export_raw_pk(CRYPTO_ALG_MLDSA87, &pubs[1],
+                                          &mldsa_raw, &mldsa_raw_len), 0);
+    assert_int_equal(mldsa_raw_len, out_lens[1]);
+    assert_memory_equal(mldsa_raw, out_pks[1], out_lens[1]);
+
+    free(rsa_raw);
+    free(mldsa_raw);
+    free(out_pks[0]);
+    free(out_pks[1]);
     crypto_free_key(&privs[0]);
     crypto_free_key(&privs[1]);
     crypto_free_key(&pubs[0]);
@@ -846,6 +891,7 @@ const struct CMUnitTest crypto_tests[] = {
     cmocka_unit_test(test_rsa_lms_sign_verify),
     cmocka_unit_test(test_rsa_mldsa_sign_verify),
     cmocka_unit_test(test_lms_mldsa_sign_verify),
+    cmocka_unit_test(test_hybrid_export_raw_pk),
     cmocka_unit_test(test_rsa_load_keypair),
     cmocka_unit_test(test_lms_load_keypair),
     cmocka_unit_test(test_mldsa_load_keypair),

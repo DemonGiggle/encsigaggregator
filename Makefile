@@ -5,8 +5,6 @@ PQCLEAN_DIR ?= libs/pqclean
 # variable to change the tool's filename everywhere.
 TOOL_NAME ?= encsigtool
 
-export CMOCKA_TEST_FILTER
-
 CFLAGS += -Iinclude -I$(MBEDTLS_DIR)/include \
         -I$(PQCLEAN_DIR)/crypto_sign/ml-dsa-87/clean \
         -I$(PQCLEAN_DIR)/common \

@@ -57,6 +57,6 @@ test: $(MBEDTLS_LIBS) $(PQ_LIB) $(TOOL_NAME) $(TEST_BIN)
 	$(TEST_BIN)
 
 debug: CFLAGS += -g -O0
-debug: clean $(TOOL_NAME)
+debug: clean $(TOOL_NAME) $(TEST_BIN)
 
 .PHONY: all clean test debug

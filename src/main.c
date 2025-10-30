@@ -8,11 +8,78 @@
 #include "verify_mode.h"
 #include "util.h"
 
+static int run_keygen_mode(const cli_options *opts)
+{
+    if (!opts) {
+        return 1;
+    }
+
+    int        ret         = 1;
+    crypto_key privs[2]    = {{0}};
+    crypto_key pubs[2]     = {{0}};
+    uint8_t    aes_key[CRYPTO_AES_MAX_KEY_SIZE] = {0};
+    uint8_t    iv[CRYPTO_AES_IV_SIZE]           = {0};
+    int        generate_pk                      = (opts->alg != CRYPTO_ALG_NONE);
+    int        generate_aes                     = (opts->aes_bits != CRYPTO_AES_KEY_BITS_NONE);
+
+    print_run_options(opts, generate_pk, generate_aes);
+
+    if (ensure_keygen_outputs_not_exist(generate_pk, generate_aes, opts->alg) != 0) {
+        perror("keygen outputs");
+        goto cleanup;
+    }
+
+    if (generate_pk) {
+        if (crypto_is_hybrid_alg(opts->alg)) {
+            if (hybrid_crypto_keygen((hybrid_alg)opts->alg, privs, pubs) != 0) {
+                fprintf(stderr, "Key generation failed\n");
+                goto cleanup;
+            }
+        } else {
+            if (crypto_keygen((crypto_alg)opts->alg, &privs[0], &pubs[0]) != 0) {
+                fprintf(stderr, "Key generation failed\n");
+                goto cleanup;
+            }
+        }
+    }
+
+    if (generate_aes) {
+        if (crypto_init_aes(opts->aes_bits, NULL, NULL, aes_key, iv) != 0) {
+            fprintf(stderr, "AES init failed\n");
+            goto cleanup;
+        }
+    }
+
+    size_t aes_key_len = 0;
+    if (generate_aes) {
+        aes_key_len = opts->aes_bits / 8;
+    }
+
+    if (write_keygen_outputs(opts->alg, generate_pk, generate_aes, privs, pubs,
+                             aes_key, aes_key_len, iv) != 0) {
+        fprintf(stderr, "Write failed\n");
+        goto cleanup;
+    }
+
+    ret = 0;
+
+cleanup:
+    crypto_free_key(&privs[0]);
+    crypto_free_key(&privs[1]);
+    crypto_free_key(&pubs[0]);
+    crypto_free_key(&pubs[1]);
+    return ret;
+}
+
 int main(int argc, char **argv)
 {
     cli_options opts;
     if (cli_parse_args(argc, argv, &opts) != 0) {
         return 1;
+    }
+
+    if (opts.keygen_mode) {
+        return run_keygen_mode(&opts);
     }
 
     if (opts.verify_sig) {

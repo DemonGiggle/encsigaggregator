@@ -22,9 +22,10 @@
 
 static void cleanup_tool_outputs(void) {
     const char *paths[] = {
-        "sk0.bin", "sk0.hex", "pk0.bin", "pk0.hex",
-        "aes.bin", "aes.hex", "aes_iv.bin", "aes_iv.hex",
-        "sig0.bin", "sig0.hex"
+        "sk0.bin",  "sk0.hex",  "pk0.bin",  "pk0.hex",
+        "sk1.bin",  "sk1.hex",  "pk1.bin",  "pk1.hex",
+        "aes.bin",  "aes.hex",  "aes_iv.bin", "aes_iv.hex",
+        "sig0.bin", "sig0.hex", "sig1.bin", "sig1.hex"
     };
     for (size_t i = 0; i < sizeof(paths) / sizeof(paths[0]); ++i)
         unlink(paths[i]);
@@ -54,63 +55,153 @@ void test_cli_missing_infile(void **state) {
     assert_int_equal(cli_parse_args(3, argv, &opts), -1);
 }
 
-/* Verify failure when required output file argument is missing. */
-void test_cli_missing_outfile(void **state) {
+/* Verify failure when neither -o nor key-generation selectors are supplied. */
+void test_cli_requires_outfile_or_keygen(void **state) {
     (void)state;
     char *argv[] = {"prog", "-i", "in", NULL};
     cli_options opts;
     assert_int_equal(cli_parse_args(3, argv, &opts), -1);
 }
 
-/* Parse minimal valid invocation and verify default options. */
-void test_cli_valid_minimal(void **state) {
+/* Accept key-generation mode when only an algorithm is requested. */
+void test_cli_keygen_rsa_only(void **state) {
+    (void)state;
+    char *argv[] = {"prog", "-a", "rsa", NULL};
+    cli_options opts;
+    assert_int_equal(cli_parse_args(3, argv, &opts), 0);
+    assert_true(opts.keygen_mode);
+    assert_int_equal(opts.alg, CRYPTO_ALG_RSA4096);
+    assert_int_equal(opts.aes_bits, CRYPTO_AES_KEY_BITS_NONE);
+}
+
+/* Accept key-generation mode when only AES material is requested. */
+void test_cli_keygen_aes_only(void **state) {
+    (void)state;
+    char *argv[] = {"prog", "-b", "256", NULL};
+    cli_options opts;
+    assert_int_equal(cli_parse_args(3, argv, &opts), 0);
+    assert_true(opts.keygen_mode);
+    assert_int_equal(opts.alg, CRYPTO_ALG_NONE);
+    assert_int_equal(opts.aes_bits, CRYPTO_AES_KEY_BITS_256);
+}
+
+/* Reject key-generation mode when existing paths are provided. */
+void test_cli_keygen_reject_paths(void **state) {
+    (void)state;
+    char *argv[] = {"prog", "-a", "rsa", "--pk-path", "pk0.bin", NULL};
+    cli_options opts;
+    assert_int_equal(cli_parse_args(5, argv, &opts), -1);
+}
+
+/* Reject encryption mode when algorithm or AES bits are omitted. */
+void test_cli_requires_selections_for_encrypt(void **state) {
     (void)state;
     char *argv[] = {"prog", "-i", "in", "-o", "out", NULL};
     cli_options opts;
-    assert_int_equal(cli_parse_args(5, argv, &opts), 0);
-    assert_int_equal(opts.alg, CRYPTO_ALG_RSA4096);
-    assert_int_equal(opts.aes_bits, CRYPTO_AES_KEY_BITS_256);
-    assert_string_equal(opts.infile, "in");
-    assert_string_equal(opts.outfile, "out");
+    assert_int_equal(cli_parse_args(5, argv, &opts), -1);
 }
 
 /* Parse verification options and ensure output path is optional. */
 void test_cli_verify_parse(void **state) {
     (void)state;
-    char *argv[] = {"prog", "--verify-sig", "--sig-path", "sig0.bin", "-i", "in", NULL};
+    char *argv[] = {"prog", "--verify-sig", "--sig-path", "sig0.bin", "-a", "rsa", "-i", "in", NULL};
     cli_options opts;
-    assert_int_equal(cli_parse_args(6, argv, &opts), 0);
+    assert_int_equal(cli_parse_args(8, argv, &opts), 0);
     assert_int_equal(opts.verify_sig, 1);
     assert_string_equal(opts.sig_path, "sig0.bin");
     assert_string_equal(opts.infile, "in");
     assert_null(opts.outfile);
 }
 
+/* Ensure signature verification requires an explicit algorithm. */
+void test_cli_verify_sig_requires_alg(void **state) {
+    (void)state;
+    char *argv[] = {"prog", "--verify-sig", "--sig-path", "sig0.bin", "-i", "in", NULL};
+    cli_options opts;
+    assert_int_equal(cli_parse_args(6, argv, &opts), -1);
+}
+
+/* Ensure decryption verification requires an explicit AES key size. */
+void test_cli_verify_dec_requires_bits(void **state) {
+    (void)state;
+    char *argv[] = {"prog", "--verify-dec", "--expected-file", "exp", "--aes-key-path", "k", "--aes-iv", "iv", "-i", "in", NULL};
+    cli_options opts;
+    assert_int_equal(cli_parse_args(10, argv, &opts), -1);
+}
+
 /* Accept RSA+LMS algorithm selection. */
 void test_cli_rsa_lms(void **state) {
     (void)state;
-    char *argv[] = {"prog", "-a", "rsa-lms", "-i", "in", "-o", "out", NULL};
+    char *argv[] = {"prog", "-a", "rsa-lms", "-b", "256", "-i", "in", "-o", "out", NULL};
     cli_options opts;
-    assert_int_equal(cli_parse_args(7, argv, &opts), 0);
+    assert_int_equal(cli_parse_args(9, argv, &opts), 0);
     assert_int_equal(opts.alg, CRYPTO_ALG_RSA4096_LMS);
 }
 
 /* Accept RSA+ML-DSA algorithm selection. */
 void test_cli_rsa_mldsa(void **state) {
     (void)state;
-    char *argv[] = {"prog", "-a", "rsa-mldsa87", "-i", "in", "-o", "out", NULL};
+    char *argv[] = {"prog", "-a", "rsa-mldsa87", "-b", "256", "-i", "in", "-o", "out", NULL};
     cli_options opts;
-    assert_int_equal(cli_parse_args(7, argv, &opts), 0);
+    assert_int_equal(cli_parse_args(9, argv, &opts), 0);
     assert_int_equal(opts.alg, CRYPTO_ALG_RSA4096_MLDSA87);
 }
 
 /* Accept LMS+ML-DSA algorithm selection. */
 void test_cli_lms_mldsa(void **state) {
     (void)state;
-    char *argv[] = {"prog", "-a", "lms-mldsa87", "-i", "in", "-o", "out", NULL};
+    char *argv[] = {"prog", "-a", "lms-mldsa87", "-b", "256", "-i", "in", "-o", "out", NULL};
     cli_options opts;
-    assert_int_equal(cli_parse_args(7, argv, &opts), 0);
+    assert_int_equal(cli_parse_args(9, argv, &opts), 0);
     assert_int_equal(opts.alg, CRYPTO_ALG_LMS_MLDSA87);
+}
+
+/* Generate signing keys through the CLI without producing ciphertext. */
+void test_tool_keygen_rsa_outputs(void **state) {
+    (void)state;
+    cleanup_tool_outputs();
+
+    char cmd[PATH_MAX];
+    snprintf(cmd, sizeof(cmd), TOOL_PATH " -a rsa");
+    int ret = system(cmd);
+    assert_true(ret != -1);
+    assert_true(WIFEXITED(ret));
+    assert_int_equal(WEXITSTATUS(ret), 0);
+
+    struct stat st;
+    assert_int_equal(stat("sk0.bin", &st), 0);
+    assert_true(st.st_size > 0);
+    assert_int_equal(stat("pk0.bin", &st), 0);
+    assert_true(st.st_size > 0);
+
+    assert_int_equal(access("aes.bin", F_OK), -1);
+    assert_int_equal(access("sig0.bin", F_OK), -1);
+
+    cleanup_tool_outputs();
+}
+
+/* Generate AES material through the CLI without producing key pairs. */
+void test_tool_keygen_aes_outputs(void **state) {
+    (void)state;
+    cleanup_tool_outputs();
+
+    char cmd[PATH_MAX];
+    snprintf(cmd, sizeof(cmd), TOOL_PATH " -b 192");
+    int ret = system(cmd);
+    assert_true(ret != -1);
+    assert_true(WIFEXITED(ret));
+    assert_int_equal(WEXITSTATUS(ret), 0);
+
+    struct stat st;
+    assert_int_equal(stat("aes.bin", &st), 0);
+    assert_int_equal((size_t)st.st_size, CRYPTO_AES_KEY_BITS_192 / 8);
+    assert_int_equal(stat("aes_iv.bin", &st), 0);
+    assert_int_equal((size_t)st.st_size, CRYPTO_AES_IV_SIZE);
+
+    assert_int_equal(access("sk0.bin", F_OK), -1);
+    assert_int_equal(access("pk0.bin", F_OK), -1);
+
+    cleanup_tool_outputs();
 }
 
 /* Refuse to overwrite ciphertext when the requested output path already exists. */
@@ -133,7 +224,7 @@ void test_tool_fails_when_ciphertext_exists(void **state) {
     close(ofd);
 
     char cmd[PATH_MAX];
-    snprintf(cmd, sizeof(cmd), TOOL_PATH " -i %s -o %s", in_path, out_path);
+    snprintf(cmd, sizeof(cmd), TOOL_PATH " -a rsa -b 256 -i %s -o %s", in_path, out_path);
     int ret = system(cmd);
     assert_true(ret != -1);
     assert_true(WIFEXITED(ret));
@@ -180,7 +271,7 @@ void test_tool_fails_when_component_exists(void **state) {
     fclose(f);
 
     char cmd[PATH_MAX];
-    snprintf(cmd, sizeof(cmd), TOOL_PATH " -i %s -o %s", in_path, out_path);
+    snprintf(cmd, sizeof(cmd), TOOL_PATH " -a rsa -b 256 -i %s -o %s", in_path, out_path);
     int ret = system(cmd);
     assert_true(ret != -1);
     assert_true(WIFEXITED(ret));
@@ -244,7 +335,7 @@ void test_tool_gen_keypair_when_aes_provided(void **state) {
     unlink(out_path);
 
     char cmd[PATH_MAX];
-    snprintf(cmd, sizeof(cmd), TOOL_PATH " -i %s -o %s --aes-key-path %s --aes-iv %s",
+    snprintf(cmd, sizeof(cmd), TOOL_PATH " -a rsa -b 256 -i %s -o %s --aes-key-path %s --aes-iv %s",
              in_path, out_path, key_path, iv_path);
     int ret = system(cmd);
     assert_true(ret != -1);
@@ -303,7 +394,7 @@ void test_tool_gen_aes_when_keys_provided(void **state) {
     unlink(out_path);
 
     char cmd[PATH_MAX];
-    snprintf(cmd, sizeof(cmd), TOOL_PATH " -i %s -o %s --pk-path %s --sk-path %s",
+    snprintf(cmd, sizeof(cmd), TOOL_PATH " -a rsa -b 256 -i %s -o %s --pk-path %s --sk-path %s",
              in_path, out_path, pk_path, sk_path);
     int ret = system(cmd);
     assert_true(ret != -1);
@@ -347,7 +438,7 @@ void test_tool_verify_signature(void **state) {
     unlink(out_path);
 
     char cmd[PATH_MAX];
-    snprintf(cmd, sizeof(cmd), TOOL_PATH " -i %s -o %s", in_path, out_path);
+    snprintf(cmd, sizeof(cmd), TOOL_PATH " -a rsa -b 256 -i %s -o %s", in_path, out_path);
     int ret = system(cmd);
     assert_true(ret != -1);
     assert_true(WIFEXITED(ret));
@@ -359,7 +450,7 @@ void test_tool_verify_signature(void **state) {
 
     char verify_cmd[PATH_MAX * 2];
     snprintf(verify_cmd, sizeof(verify_cmd),
-             TOOL_PATH " --verify-sig --sig-path sig0.bin --pk-path pk0.bin --sk-path sk0.bin -i %s",
+             TOOL_PATH " --verify-sig --sig-path sig0.bin --pk-path pk0.bin --sk-path sk0.bin -a rsa -i %s",
              in_path);
     ret = system(verify_cmd);
     assert_true(ret != -1);
@@ -396,7 +487,7 @@ void test_tool_verify_decryption_success(void **state) {
     unlink(out_path);
 
     char cmd[PATH_MAX];
-    snprintf(cmd, sizeof(cmd), TOOL_PATH " -i %s -o %s", in_path, out_path);
+    snprintf(cmd, sizeof(cmd), TOOL_PATH " -a rsa -b 256 -i %s -o %s", in_path, out_path);
     int ret = system(cmd);
     assert_true(ret != -1);
     assert_true(WIFEXITED(ret));
@@ -410,7 +501,7 @@ void test_tool_verify_decryption_success(void **state) {
 
     char verify_cmd[PATH_MAX * 2];
     snprintf(verify_cmd, sizeof(verify_cmd),
-             TOOL_PATH " --verify-dec --expected-file %s --aes-key-path aes.bin --aes-iv aes_iv.bin -i %s -o %s",
+             TOOL_PATH " --verify-dec --expected-file %s --aes-key-path aes.bin --aes-iv aes_iv.bin -b 256 -i %s -o %s",
              in_path, out_path, dec_path);
     ret = system(verify_cmd);
     assert_true(ret != -1);
@@ -454,7 +545,7 @@ void test_tool_verify_decryption_failure(void **state) {
     unlink(out_path);
 
     char cmd[PATH_MAX];
-    snprintf(cmd, sizeof(cmd), TOOL_PATH " -i %s -o %s", in_path, out_path);
+    snprintf(cmd, sizeof(cmd), TOOL_PATH " -a rsa -b 256 -i %s -o %s", in_path, out_path);
     int ret = system(cmd);
     assert_true(ret != -1);
     assert_true(WIFEXITED(ret));
@@ -471,7 +562,7 @@ void test_tool_verify_decryption_failure(void **state) {
 
     char verify_cmd[PATH_MAX * 2];
     snprintf(verify_cmd, sizeof(verify_cmd),
-             TOOL_PATH " --verify-dec --expected-file %s --aes-key-path aes.bin --aes-iv aes_iv.bin -i %s",
+             TOOL_PATH " --verify-dec --expected-file %s --aes-key-path aes.bin --aes-iv aes_iv.bin -b 256 -i %s",
              wrong_path, out_path);
     ret = system(verify_cmd);
     assert_true(ret != -1);
@@ -492,12 +583,19 @@ const struct CMUnitTest cli_tests[] = {
     cmocka_unit_test(test_cli_invalid_alg),
     cmocka_unit_test(test_cli_invalid_bits),
     cmocka_unit_test(test_cli_missing_infile),
-    cmocka_unit_test(test_cli_missing_outfile),
-    cmocka_unit_test(test_cli_valid_minimal),
+    cmocka_unit_test(test_cli_requires_outfile_or_keygen),
+    cmocka_unit_test(test_cli_keygen_rsa_only),
+    cmocka_unit_test(test_cli_keygen_aes_only),
+    cmocka_unit_test(test_cli_keygen_reject_paths),
+    cmocka_unit_test(test_cli_requires_selections_for_encrypt),
     cmocka_unit_test(test_cli_verify_parse),
+    cmocka_unit_test(test_cli_verify_sig_requires_alg),
+    cmocka_unit_test(test_cli_verify_dec_requires_bits),
     cmocka_unit_test(test_cli_rsa_lms),
     cmocka_unit_test(test_cli_rsa_mldsa),
     cmocka_unit_test(test_cli_lms_mldsa),
+    cmocka_unit_test(test_tool_keygen_rsa_outputs),
+    cmocka_unit_test(test_tool_keygen_aes_outputs),
     cmocka_unit_test(test_tool_fails_when_ciphertext_exists),
     cmocka_unit_test(test_tool_fails_when_component_exists),
     cmocka_unit_test(test_tool_gen_keypair_when_aes_provided),

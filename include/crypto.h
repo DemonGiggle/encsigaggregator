@@ -12,6 +12,7 @@ extern "C" {
 #define CRYPTO_AES_KEY_BITS_128 128
 #define CRYPTO_AES_KEY_BITS_192 192
 #define CRYPTO_AES_KEY_BITS_256 256
+#define CRYPTO_AES_KEY_BITS_NONE ((size_t)-1)
 
 /* Size of the CBC initialization vector in bytes */
 #define CRYPTO_AES_IV_SIZE 16
@@ -36,12 +37,14 @@ extern "C" {
 
 /**
  * enum crypto_alg - supported primitive cryptographic algorithms
+ * @CRYPTO_ALG_NONE: no signing algorithm selected
  * @CRYPTO_ALG_RSA4096: RSA with 4096-bit modulus
  * @CRYPTO_ALG_LMS: Leighton-Micali Signature scheme
  * @CRYPTO_ALG_MLDSA87: ML-DSA with 87-byte signatures
  * @CRYPTO_ALG_ENUM_END: marker for end of primitive algorithm identifiers
  */
 typedef enum {
+    CRYPTO_ALG_NONE = -1,
     CRYPTO_ALG_RSA4096,
     CRYPTO_ALG_LMS,
     CRYPTO_ALG_MLDSA87,

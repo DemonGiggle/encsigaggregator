@@ -25,6 +25,8 @@ int read_file(const char *path, uint8_t **buf, size_t *len);
  */
 int ensure_outputs_not_exist(const char *out_path, int include_keys, int alg);
 
+int ensure_keygen_outputs_not_exist(int include_pk, int include_aes, int alg);
+
 /**
  * write_outputs - write encrypted data, signature, and optional keys to files
  * @out_path: output file path
@@ -50,5 +52,11 @@ int write_outputs(const char *out_path, int include_keys, int alg,
                   const uint8_t sigs[2][CRYPTO_MAX_SIG_SIZE],
                   const size_t sig_lens[2],
                   const uint8_t *enc, size_t enc_len);
+
+int write_keygen_outputs(int alg, int include_pk, int include_aes,
+                         const crypto_key privs[2], const crypto_key pubs[2],
+                         const uint8_t aes_key[CRYPTO_AES_MAX_KEY_SIZE],
+                         size_t aes_key_len,
+                         const uint8_t iv[CRYPTO_AES_IV_SIZE]);
 
 #endif /* UTIL_H */

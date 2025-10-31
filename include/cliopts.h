@@ -11,32 +11,34 @@ extern "C" {
 
 /**
  * struct cli_options - parsed command-line parameters
- * @alg:          selected signing algorithm
- * @aes_bits:     AES key size in bits
- * @infile:       path to input file
- * @outfile:      path to output file
- * @pk_path:      public key file path
- * @sk_path:      private key file path
- * @aes_key_path: AES key file path
- * @aes_iv_path:  AES IV file path
- * @verify_sig:   non-zero to verify signatures instead of signing
- * @sig_path:     signature file path(s)
- * @verify_dec:   non-zero to verify AES decryption instead of signing
- * @expected_path: expected plaintext file for decryption verification
+ * @alg:             selected signing algorithm
+ * @aes_bits:        AES key size in bits
+ * @infile:          path to input file
+ * @outfile:         path to output file
+ * @pk_path:         public key file path
+ * @sk_path:         private key file path
+ * @aes_key_path:    AES key file path
+ * @aes_iv_path:     AES IV file path
+ * @verify_sig:      non-zero to verify signatures instead of signing
+ * @sig_path:        signature file path(s)
+ * @verify_dec:      non-zero to verify AES decryption instead of signing
+ * @expected_path:   expected plaintext file for decryption verification
+ * @keygen_mode:     non-zero when the CLI should only generate keys
  */
 typedef struct {
-    int alg;
-    size_t aes_bits;
+    int         alg;
+    size_t      aes_bits;
     const char *infile;
     const char *outfile;
     const char *pk_path;
     const char *sk_path;
     const char *aes_key_path;
     const char *aes_iv_path;
-    int verify_sig;
+    int         verify_sig;
     const char *sig_path;
-    int verify_dec;
+    int         verify_dec;
     const char *expected_path;
+    int         keygen_mode;
 } cli_options;
 
 /**

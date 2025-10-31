@@ -153,6 +153,38 @@ int ensure_outputs_not_exist(const char *out_path, int include_keys, int alg)
     return 0;
 }
 
+int ensure_keygen_outputs_not_exist(int include_pk, int include_aes, int alg)
+{
+    if (!include_pk && !include_aes) {
+        return 0;
+    }
+
+    if (include_aes) {
+        if (ensure_component_paths_free("aes_iv") != 0 ||
+            ensure_component_paths_free("aes") != 0) {
+            return -1;
+        }
+    }
+
+    if (!include_pk) {
+        return 0;
+    }
+
+    if (ensure_component_paths_free("sk0") != 0 ||
+        ensure_component_paths_free("pk0") != 0) {
+        return -1;
+    }
+
+    if (crypto_is_hybrid_alg(alg)) {
+        if (ensure_component_paths_free("sk1") != 0 ||
+            ensure_component_paths_free("pk1") != 0) {
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
 static void print_summary(const output_component *entries, size_t count)
 {
     if (count == 0) {
@@ -388,6 +420,82 @@ int write_outputs(const char *out_path, int include_keys, int alg,
                 goto cleanup;
             }
             if (write_component("pk0", pub_blobs[0].key,
+                                pub_blobs[0].key_len, outputs,
+                                &output_count) != 0) {
+                goto cleanup;
+            }
+        }
+    }
+
+    result = 0;
+
+cleanup:
+    free(priv_blobs[0].key);
+    free(priv_blobs[1].key);
+    free(pub_blobs[0].key);
+    free(pub_blobs[1].key);
+    if (result == 0) {
+        print_summary(outputs, output_count);
+    }
+    return result;
+}
+
+int write_keygen_outputs(int alg, int include_pk, int include_aes,
+                         const crypto_key privs[2], const crypto_key pubs[2],
+                         const uint8_t aes_key[CRYPTO_AES_MAX_KEY_SIZE],
+                         size_t aes_key_len,
+                         const uint8_t iv[CRYPTO_AES_IV_SIZE])
+{
+    output_component outputs[MAX_OUTPUT_COMPONENTS];
+    size_t output_count = 0;
+    crypto_key priv_blobs[2] = {{0}};
+    crypto_key pub_blobs[2] = {{0}};
+    int result = -1;
+
+    if (include_aes) {
+        if (!aes_key || !iv || aes_key_len == 0) {
+            goto cleanup;
+        }
+        if (write_component("aes_iv", iv, CRYPTO_AES_IV_SIZE, outputs,
+                            &output_count) != 0) {
+            goto cleanup;
+        }
+        if (write_component("aes", aes_key, aes_key_len, outputs,
+                            &output_count) != 0) {
+            goto cleanup;
+        }
+    }
+
+    if (include_pk) {
+        int hybrid = crypto_is_hybrid_alg(alg);
+        if (hybrid) {
+            if (hybrid_crypto_export_keypairs((hybrid_alg)alg, privs, pubs,
+                                              priv_blobs, pub_blobs) != 0) {
+                goto cleanup;
+            }
+            if (write_component("sk0", priv_blobs[0].key,
+                                priv_blobs[0].key_len, outputs,
+                                &output_count) != 0 ||
+                write_component("sk1", priv_blobs[1].key,
+                                priv_blobs[1].key_len, outputs,
+                                &output_count) != 0 ||
+                write_component("pk0", pub_blobs[0].key,
+                                pub_blobs[0].key_len, outputs,
+                                &output_count) != 0 ||
+                write_component("pk1", pub_blobs[1].key,
+                                pub_blobs[1].key_len, outputs,
+                                &output_count) != 0) {
+                goto cleanup;
+            }
+        } else {
+            if (crypto_export_keypair((crypto_alg)alg, &privs[0], &pubs[0],
+                                      &priv_blobs[0], &pub_blobs[0]) != 0) {
+                goto cleanup;
+            }
+            if (write_component("sk0", priv_blobs[0].key,
+                                priv_blobs[0].key_len, outputs,
+                                &output_count) != 0 ||
+                write_component("pk0", pub_blobs[0].key,
                                 pub_blobs[0].key_len, outputs,
                                 &output_count) != 0) {
                 goto cleanup;

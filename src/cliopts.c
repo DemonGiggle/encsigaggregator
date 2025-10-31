@@ -174,11 +174,6 @@ int cli_parse_args(int argc, char **argv, cli_options *o)
         return -1;
     }
 
-    if (!keygen_mode && !o->verify_sig && !o->verify_dec && !o->outfile) {
-        cli_usage(argv[0]);
-        return -1;
-    }
-
     if (o->verify_sig && !o->sig_path) {
         fprintf(stderr, "--verify-sig requires --sig-path\n");
         cli_usage(argv[0]);
